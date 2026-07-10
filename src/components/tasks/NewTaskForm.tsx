@@ -6,7 +6,6 @@ import { createClient } from '@/lib/supabase/client';
 import { format } from 'date-fns';
 
 interface Props {
-  userId:interface Props {
   userId: string;
   initialDate?: string;
   staff: { id: string; full_name: string }[];
@@ -17,10 +16,13 @@ interface Props {
 
 const JOB_TYPES = ['RaaS', 'Service', 'Demo', 'Delivery', 'Mapping', 'Consultancy'];
 
-export function NewTaskForm({ userId, initialDate, staff, customers, locations, vehicles }: Props) {  const router = useRouter();
+export function NewTaskForm({ userId, initialDate, staff, customers, locations, vehicles }: Props) {
+  const router = useRouter();
+
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
-  const [taskDate, setTaskDate] = useState(initialDate ?? format(new Date(), 'yyyy-MM-dd'));  const [allDay, setAllDay] = useState(true);
+  const [taskDate, setTaskDate] = useState(initialDate ?? format(new Date(), 'yyyy-MM-dd'));
+  const [allDay, setAllDay] = useState(true);
   const [startTime, setStartTime] = useState('');
   const [endTime, setEndTime] = useState('');
   const [priority, setPriority] = useState('normal');
@@ -78,51 +80,30 @@ export function NewTaskForm({ userId, initialDate, staff, customers, locations, 
     <form onSubmit={handleSubmit} className="space-y-5 bg-white rounded-xl border border-gray-100 p-4">
       {error && <div className="p-3 rounded-lg bg-red-50 text-sm text-red-700">{error}</div>}
 
-      {/* Title */}
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-1">Title *</label>
-        <input
-          value={title}
-          onChange={e => setTitle(e.target.value)}
-          required
-          placeholder="What needs doing?"
-          className={inputClass}
-        />
+        <input value={title} onChange={e => setTitle(e.target.value)} required placeholder="What needs doing?" className={inputClass} />
       </div>
 
-      {/* Description */}
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
-        <textarea
-          value={description}
-          onChange={e => setDescription(e.target.value)}
-          rows={3}
-          className={`${inputClass} resize-none`}
-        />
+        <textarea value={description} onChange={e => setDescription(e.target.value)} rows={3} className={`${inputClass} resize-none`} />
       </div>
 
-      {/* Job type tabs */}
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-2">Job type</label>
         <div className="flex flex-wrap gap-2">
           {JOB_TYPES.map(type => (
-            <button
-              key={type}
-              type="button"
-              onClick={() => setJobType(jobType === type ? '' : type)}
+            <button key={type} type="button" onClick={() => setJobType(jobType === type ? '' : type)}
               className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
-                jobType === type
-                  ? 'bg-aas-blue text-white border-aas-blue'
-                  : 'bg-white text-gray-600 border-gray-300 hover:border-aas-blue hover:text-aas-blue'
-              }`}
-            >
+                jobType === type ? 'bg-aas-blue text-white border-aas-blue' : 'bg-white text-gray-600 border-gray-300 hover:border-aas-blue hover:text-aas-blue'
+              }`}>
               {type}
             </button>
           ))}
         </div>
       </div>
 
-      {/* Date + Priority */}
       <div className="grid grid-cols-2 gap-3">
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
@@ -139,18 +120,11 @@ export function NewTaskForm({ userId, initialDate, staff, customers, locations, 
         </div>
       </div>
 
-      {/* All day toggle */}
       <label className="flex items-center gap-2 cursor-pointer select-none">
-        <input
-          type="checkbox"
-          checked={allDay}
-          onChange={e => setAllDay(e.target.checked)}
-          className="rounded"
-        />
+        <input type="checkbox" checked={allDay} onChange={e => setAllDay(e.target.checked)} className="rounded" />
         <span className="text-sm text-gray-700">All day</span>
       </label>
 
-      {/* Start / end time — hidden when all day */}
       {!allDay && (
         <div className="grid grid-cols-2 gap-3">
           <div>
@@ -164,7 +138,6 @@ export function NewTaskForm({ userId, initialDate, staff, customers, locations, 
         </div>
       )}
 
-      {/* Customer + Location */}
       <div className="grid grid-cols-2 gap-3">
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Customer</label>
@@ -182,32 +155,23 @@ export function NewTaskForm({ userId, initialDate, staff, customers, locations, 
         </div>
       </div>
 
-      {/* Machine (vehicle) */}
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-1">Machine</label>
         <select value={vehicleId} onChange={e => setVehicleId(e.target.value)} className={inputClass}>
           <option value="">— none —</option>
           {vehicles.map(v => (
-            <option key={v.id} value={v.id}>
-              {v.name}{v.registration ? ` (${v.registration})` : ''}
-            </option>
+            <option key={v.id} value={v.id}>{v.name}{v.registration ? ` (${v.registration})` : ''}</option>
           ))}
         </select>
       </div>
 
-      {/* Assign to */}
       {staff.length > 0 && (
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Assign to</label>
           <div className="grid grid-cols-2 gap-1.5 max-h-40 overflow-y-auto border border-gray-200 rounded-lg p-2">
             {staff.map(s => (
               <label key={s.id} className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={assignees.includes(s.id)}
-                  onChange={() => toggleAssignee(s.id)}
-                  className="rounded"
-                />
+                <input type="checkbox" checked={assignees.includes(s.id)} onChange={() => toggleAssignee(s.id)} className="rounded" />
                 <span className="text-sm text-gray-700 truncate">{s.full_name}</span>
               </label>
             ))}
@@ -215,33 +179,18 @@ export function NewTaskForm({ userId, initialDate, staff, customers, locations, 
         </div>
       )}
 
-      {/* Notes */}
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
-        <textarea
-          value={notes}
-          onChange={e => setNotes(e.target.value)}
-          rows={2}
-          className={`${inputClass} resize-none`}
-        />
+        <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2} className={`${inputClass} resize-none`} />
       </div>
 
-      {/* Auto rollover */}
       <label className="flex items-center gap-2 cursor-pointer select-none">
-        <input
-          type="checkbox"
-          checked={autoRollover}
-          onChange={e => setAutoRollover(e.target.checked)}
-          className="rounded"
-        />
+        <input type="checkbox" checked={autoRollover} onChange={e => setAutoRollover(e.target.checked)} className="rounded" />
         <span className="text-sm text-gray-700">Auto-move to next day if incomplete</span>
       </label>
 
-      {/* Actions */}
       <div className="flex gap-3 pt-2">
-        <button type="button" onClick={() => router.back()} className="flex-1 py-2.5 border border-gray-200 rounded-lg text-sm text-gray-600">
-          Cancel
-        </button>
+        <button type="button" onClick={() => router.back()} className="flex-1 py-2.5 border border-gray-200 rounded-lg text-sm text-gray-600">Cancel</button>
         <button type="submit" disabled={loading} className="flex-1 py-2.5 bg-aas-blue text-white rounded-lg text-sm font-medium disabled:opacity-60">
           {loading ? 'Creating…' : 'Create task'}
         </button>
