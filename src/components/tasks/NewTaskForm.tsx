@@ -6,7 +6,9 @@ import { createClient } from '@/lib/supabase/client';
 import { format } from 'date-fns';
 
 interface Props {
+  userId:interface Props {
   userId: string;
+  initialDate?: string;
   staff: { id: string; full_name: string }[];
   customers: { id: string; company_name: string }[];
   locations: { id: string; name: string }[];
@@ -15,13 +17,10 @@ interface Props {
 
 const JOB_TYPES = ['RaaS', 'Service', 'Demo', 'Delivery', 'Mapping', 'Consultancy'];
 
-export function NewTaskForm({ userId, staff, customers, locations, vehicles }: Props) {
-  const router = useRouter();
-
+export function NewTaskForm({ userId, initialDate, staff, customers, locations, vehicles }: Props) {  const router = useRouter();
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
-  const [taskDate, setTaskDate] = useState(format(new Date(), 'yyyy-MM-dd'));
-  const [allDay, setAllDay] = useState(true);
+  const [taskDate, setTaskDate] = useState(initialDate ?? format(new Date(), 'yyyy-MM-dd'));  const [allDay, setAllDay] = useState(true);
   const [startTime, setStartTime] = useState('');
   const [endTime, setEndTime] = useState('');
   const [priority, setPriority] = useState('normal');
