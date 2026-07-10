@@ -39,7 +39,7 @@ export default async function TasksPage({
 
   let query = supabase
     .from('tasks')
-    .select('*, assignees:task_assignees(user_id, user:profiles(full_name)), customer:customers(company_name), location:locations(name)')
+    .select('*, assignees:task_assignees(user_id, user:profiles!task_assignees_user_id_fkey(full_name)), customer:customers(company_name), location:locations(name)')
     .order('task_date', { ascending: true, nullsFirst: false })
     .order('created_at', { ascending: false });
 
