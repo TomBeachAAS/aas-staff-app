@@ -2,9 +2,11 @@ import { createClient } from '@/lib/supabase/server';
 import { redirect, notFound } from 'next/navigation';
 import { format } from 'date-fns';
 import Link from 'next/link';
+import { Pencil } from 'lucide-react';
 import { TaskStatusBadge } from '@/components/ui/Badge';
 import { Card, CardContent } from '@/components/ui/Card';
 import { TaskCompleteForm } from '@/components/tasks/TaskCompleteForm';
+import { TaskDeleteButton } from '@/components/tasks/TaskDeleteButton';
 
 export const dynamic = 'force-dynamic';
 
@@ -16,7 +18,7 @@ export default async function TaskDetailPage({ params }: { params: Promise<{ id:
 
   const { data: task } = await supabase
     .from('tasks')
-    .select('*, assignees:task_assignees(user_id, user:profiles(full_name)), customer:customers(company_name), location:locations(name, address_line1, postcode, latitude, longitude), created_by_profile:profiles!tasks_created_by_fkey(full_name)')
+    .select('*, assignees:task_assignees(user_id, user:profiles!task_assignees_user_id_fkey(full_name)), customer:customers(company_name), location:locations(name, address_line1, postcode, latitude, longitude), created_by_profile:profiles!tasks_created_by_fkey(full_name)')
     .eq('id', id)
     .single();
 
@@ -26,6 +28,7 @@ export default async function TaskDetailPage({ params }: { params: Promise<{ id:
   const isManagerOrAdmin = ['administrator', 'manager'].includes(profile?.role ?? '');
   const isAssigned = (task.assignees as {user_id: string}[]).some(a => a.user_id === user.id);
   const canComplete = isAssigned || task.created_by === user.id || isManagerOrAdmin;
+  const canEdit = task.created_by === user.id || isManagerOrAdmin;
 
   const customer = task.customer as {company_name: string} | undefined;
   const location = task.location as {name: string; address_line1?: string; postcode?: string; latitude?: number; longitude?: number} | undefined;
@@ -36,7 +39,18 @@ export default async function TaskDetailPage({ params }: { params: Promise<{ id:
     <div className="p-4 space-y-4 max-w-2xl mx-auto">
       <div className="flex items-start justify-between gap-3">
         <h2 className="text-xl font-bold text-gray-800">{task.title}</h2>
-        <TaskStatusBadge status={task.status} />
+        <div className="flex items-center gap-2 shrink-0">
+          <TaskStatusBadge status={task.status} />
+          {canEdit && (
+            <Link
+              href={`/tasks/${id}/edit`}
+              className="flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50"
+            >
+              <Pencil size={14} />
+              Edit
+            </Link>
+          )}
+        </div>
       </div>
 
       {task.task_date && (
@@ -63,7 +77,7 @@ export default async function TaskDetailPage({ params }: { params: Promise<{ id:
             <p className="text-sm font-medium text-gray-800">{location.name}</p>
             {location.postcode && <p className="text-xs text-gray-400">{location.postcode}</p>}
             {location.latitude && location.longitude && (
-              <a
+              
                 href={`https://maps.google.com/?q=${location.latitude},${location.longitude}`}
                 target="_blank"
                 rel="noopener noreferrer"
@@ -111,6 +125,10 @@ export default async function TaskDetailPage({ params }: { params: Promise<{ id:
 
       {canComplete && !['completed', 'cancelled'].includes(task.status) && (
         <TaskCompleteForm taskId={task.id} userId={user.id} />
+      )}
+
+      {canEdit && (
+        <TaskDeleteButton taskId={task.id} />
       )}
 
       <div className="flex gap-2">
