@@ -39,8 +39,7 @@ export default async function TasksPage({
 
   let query = supabase
     .from('tasks')
-    .select('*, assignees:task_assignees(user_id, user:profiles!task_assignees_user_id_fkey(full_name)), customer:customers(company_name), location:locations(name)')
-    .order('task_date', { ascending: true, nullsFirst: false })
+.select('*, assignees:task_assignees(user_id, user:profiles!task_assignees_user_id_fkey(full_name)), customer:customers(company_name), location:locations(name, address_line1, postcode, latitude, longitude), created_by_profile:profiles!tasks_created_by_fkey(full_name)')    .order('task_date', { ascending: true, nullsFirst: false })
     .order('created_at', { ascending: false });
 
   if (statusFilter === 'active') {
