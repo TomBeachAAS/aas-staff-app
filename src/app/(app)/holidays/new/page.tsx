@@ -8,8 +8,9 @@ import { getLeaveYear } from '@/lib/utils';
 
 export default function NewHolidayPage() {
   const router = useRouter();
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
+  const params = useSearchParams();
+  const [startDate, setStartDate] = useState(params.get('start') ?? '');
+  const [endDate, setEndDate] = useState(params.get('end') ?? '');
   const [notes, setNotes] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
