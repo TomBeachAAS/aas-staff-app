@@ -51,7 +51,7 @@ export default async function TasksPage({
     query = query.not('status', 'in', '("completed","cancelled")').lt('task_date', today);
   }
 
-  const { data: tasks } = await query.limit(100);
+const { data: tasks, error: tasksError } = await query.limit(100);
 
   const overdueTasks = (tasks ?? []).filter(t => t.task_date && t.task_date < today && !['completed', 'cancelled'].includes(t.status));
   const todayTasks = (tasks ?? []).filter(t => t.task_date === today);
@@ -125,6 +125,12 @@ export default async function TasksPage({
           </Link>
         ))}
       </div>
+
+      {tasksError && (
+  <div className="p-3 rounded-lg bg-red-50 text-sm text-red-700 font-mono break-all">
+    {tasksError.message}
+  </div>
+)}
 
       {statusFilter === 'active' && (
         <>
