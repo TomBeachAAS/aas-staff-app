@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import {
   format, startOfMonth, endOfMonth, startOfWeek, endOfWeek,
   addDays, addMonths, addWeeks, subMonths, subWeeks,
-  isSameMonth, isSameDay, isToday, parseISO, eachDayOfInterval
+  isSameMonth, isToday, parseISO, eachDayOfInterval
 } from 'date-fns';
 import { ChevronLeft, ChevronRight, Plus, X } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
@@ -25,18 +25,18 @@ interface Props {
 }
 
 const MODAL_EVENT_TYPES = [
-  { value: 'task',          label: 'Task',          pill: 'bg-aas-blue text-white border-aas-blue' },
-  { value: 'holiday',       label: 'Annual Leave',  pill: 'bg-green-100 text-green-800 border-green-200' },
-  { value: 'sickness',      label: 'Sickness',      pill: 'bg-red-100 text-red-800 border-red-200' },
-  { value: 'customer_visit',label: 'Customer Visit',pill: 'bg-blue-100 text-blue-800 border-blue-200' },
-  { value: 'meeting',       label: 'Meeting',       pill: 'bg-violet-100 text-violet-800 border-violet-200' },
-  { value: 'training',      label: 'Training',      pill: 'bg-pink-100 text-pink-800 border-pink-200' },
-  { value: 'farm_work',     label: 'Farm Work',     pill: 'bg-yellow-100 text-yellow-800 border-yellow-200' },
-  { value: 'site_work',     label: 'Site Work',     pill: 'bg-orange-100 text-orange-800 border-orange-200' },
-  { value: 'travel',        label: 'Travel',        pill: 'bg-cyan-100 text-cyan-800 border-cyan-200' },
-  { value: 'office',        label: 'Office',        pill: 'bg-indigo-100 text-indigo-800 border-indigo-200' },
-  { value: 'home_working',  label: 'Home Working',  pill: 'bg-purple-100 text-purple-800 border-purple-200' },
-  { value: 'general_work',  label: 'General',       pill: 'bg-gray-100 text-gray-800 border-gray-200' },
+  { value: 'task',           label: 'Task',           pill: 'bg-aas-blue text-white border-aas-blue' },
+  { value: 'holiday',        label: 'Annual Leave',   pill: 'bg-green-100 text-green-800 border-green-200' },
+  { value: 'sickness',       label: 'Sickness',       pill: 'bg-red-100 text-red-800 border-red-200' },
+  { value: 'customer_visit', label: 'Customer Visit', pill: 'bg-blue-100 text-blue-800 border-blue-200' },
+  { value: 'meeting',        label: 'Meeting',        pill: 'bg-violet-100 text-violet-800 border-violet-200' },
+  { value: 'training',       label: 'Training',       pill: 'bg-pink-100 text-pink-800 border-pink-200' },
+  { value: 'farm_work',      label: 'Farm Work',      pill: 'bg-yellow-100 text-yellow-800 border-yellow-200' },
+  { value: 'site_work',      label: 'Site Work',      pill: 'bg-orange-100 text-orange-800 border-orange-200' },
+  { value: 'travel',         label: 'Travel',         pill: 'bg-cyan-100 text-cyan-800 border-cyan-200' },
+  { value: 'office',         label: 'Office',         pill: 'bg-indigo-100 text-indigo-800 border-indigo-200' },
+  { value: 'home_working',   label: 'Home Working',   pill: 'bg-purple-100 text-purple-800 border-purple-200' },
+  { value: 'general_work',   label: 'General',        pill: 'bg-gray-100 text-gray-800 border-gray-200' },
 ];
 
 export function CalendarView({ currentUserId, profile, initialView, initialDate, allStaff, bankHolidays }: Props) {
@@ -44,9 +44,11 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
   const [view, setView] = useState<CalView>(initialView);
   const [current, setCurrent] = useState(() => parseISO(initialDate));
   const [events, setEvents] = useState<CalendarEvent[]>([]);
+  const [tasks, setTasks] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const isManagerOrAdmin = ['administrator', 'manager'].includes(profile.role);
 
+  // Modal state
   const [modalOpen, setModalOpen] = useState(false);
   const [modalDate, setModalDate] = useState(format(new Date(), 'yyyy-MM-dd'));
   const [eventType, setEventType] = useState('general_work');
@@ -74,7 +76,10 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
     else if (view === 'month') { start = startOfWeek(startOfMonth(current), { weekStartsOn: 1 }); end = endOfWeek(endOfMonth(current), { weekStartsOn: 1 }); }
     else { start = startOfWeek(current, { weekStartsOn: 1 }); end = addDays(start, 27); }
 
-    let query = supabase
+    const startStr = format(start, 'yyyy-MM-dd');
+    const endStr = format(end, 'yyyy-MM-dd');
+
+    let eventsQuery = supabase
       .from('calendar_events')
       .select('*, user:profiles(id, full_name), customer:customers(company_name), location:locations(name)')
       .gte('start_datetime', start.toISOString())
@@ -82,11 +87,25 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
       .order('start_datetime');
 
     if (!isManagerOrAdmin) {
-      query = query.eq('user_id', currentUserId);
+      eventsQuery = eventsQuery.eq('user_id', currentUserId);
     }
 
-    const { data } = await query;
-    setEvents((data as CalendarEvent[]) ?? []);
+    let tasksQuery = supabase
+      .from('tasks')
+      .select('*, customer:customers(company_name)')
+      .gte('task_date', startStr)
+      .lte('task_date', endStr)
+      .not('status', 'eq', 'cancelled')
+      .order('task_date');
+
+    if (!isManagerOrAdmin) {
+      tasksQuery = tasksQuery.eq('created_by', currentUserId);
+    }
+
+    const [{ data: evData }, { data: taskData }] = await Promise.all([eventsQuery, tasksQuery]);
+
+    setEvents((evData as CalendarEvent[]) ?? []);
+    setTasks(taskData ?? []);
     setLoading(false);
   }, [view, current, currentUserId, isManagerOrAdmin]);
 
@@ -122,25 +141,20 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
 
   async function handleSave() {
     setModalError('');
-
     if (eventType === 'task') {
       setModalOpen(false);
       router.push(`/tasks/new?date=${modalDate}`);
       return;
     }
-
     if (eventType === 'holiday') {
       setModalOpen(false);
       router.push(`/holidays/new?start=${modalDate}&end=${endDate || modalDate}`);
       return;
     }
-
     setSaving(true);
     const supabase = createClient();
-
     const startDatetime = allDay ? `${modalDate}T00:00:00` : `${modalDate}T${startTime}:00`;
     const endDatetime = allDay ? `${endDate || modalDate}T23:59:59` : `${modalDate}T${endTime}:00`;
-
     const { error } = await supabase.from('calendar_events').insert({
       user_id: targetUserId,
       event_type: eventType as any,
@@ -153,7 +167,6 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
       notes: notes || null,
       created_by: currentUserId,
     });
-
     setSaving(false);
     if (error) { setModalError(error.message); return; }
     setModalOpen(false);
@@ -172,10 +185,15 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
   function getEventsForDay(date: Date) {
     const dateStr = format(date, 'yyyy-MM-dd');
     return events.filter(e => {
-      const start = e.start_datetime.split('T')[0];
-      const end = e.end_datetime.split('T')[0];
-      return dateStr >= start && dateStr <= end;
+      const s = e.start_datetime.split('T')[0];
+      const en = e.end_datetime.split('T')[0];
+      return dateStr >= s && dateStr <= en;
     });
+  }
+
+  function getTasksForDay(date: Date) {
+    const dateStr = format(date, 'yyyy-MM-dd');
+    return tasks.filter(t => t.task_date === dateStr);
   }
 
   function EventChip({ event }: { event: CalendarEvent }) {
@@ -189,6 +207,22 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
     );
   }
 
+  function TaskChip({ task }: { task: any }) {
+    const priorityColour: Record<string, string> = {
+      urgent: 'bg-red-100 text-red-800 border-red-200',
+      high: 'bg-orange-100 text-orange-800 border-orange-200',
+      normal: 'bg-blue-100 text-blue-800 border-blue-200',
+      low: 'bg-gray-100 text-gray-600 border-gray-200',
+    };
+    const colour = priorityColour[task.priority] ?? priorityColour.normal;
+    return (
+      <div className={cn('text-xs px-1.5 py-0.5 rounded border truncate cursor-pointer hover:opacity-80', colour)}>
+        ✓ {task.title}
+      </div>
+    );
+  }
+
+  // ── Month view ──────────────────────────────────────────────
   function MonthView() {
     const monthStart = startOfMonth(current);
     const monthEnd = endOfMonth(current);
@@ -208,8 +242,10 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
           {days.map(day => {
             const dayStr = format(day, 'yyyy-MM-dd');
             const dayEvents = getEventsForDay(day);
+            const dayTasks = getTasksForDay(day);
             const bh = bankHolidayMap.get(dayStr);
             const inMonth = isSameMonth(day, current);
+            const total = dayEvents.length + dayTasks.length;
             return (
               <div
                 key={dayStr}
@@ -217,7 +253,7 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
                 className={cn(
                   'border-b border-r border-gray-50 p-1 min-h-0 flex flex-col overflow-hidden cursor-pointer hover:bg-gray-50 transition-colors',
                   !inMonth && 'bg-gray-50/50',
-                  isToday(day) && 'bg-aas-blue-50'
+                  isToday(day) && 'bg-blue-50'
                 )}
               >
                 <div className={cn(
@@ -228,8 +264,9 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
                 </div>
                 {bh && <div className="text-[10px] text-purple-600 font-medium truncate mb-0.5">{bh}</div>}
                 <div className="flex-1 overflow-hidden space-y-0.5">
-                  {dayEvents.slice(0, 3).map(ev => <EventChip key={ev.id} event={ev} />)}
-                  {dayEvents.length > 3 && <div className="text-[10px] text-gray-400">+{dayEvents.length - 3} more</div>}
+                  {dayEvents.slice(0, 2).map(ev => <EventChip key={ev.id} event={ev} />)}
+                  {dayTasks.slice(0, 2).map(t => <TaskChip key={t.id} task={t} />)}
+                  {total > 4 && <div className="text-[10px] text-gray-400">+{total - 4} more</div>}
                 </div>
               </div>
             );
@@ -239,6 +276,7 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
     );
   }
 
+  // ── Week view ──────────────────────────────────────────────
   function WeekView() {
     const weekStart = startOfWeek(current, { weekStartsOn: 1 });
     const days = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
@@ -250,7 +288,7 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
             const bh = bankHolidayMap.get(format(day, 'yyyy-MM-dd'));
             return (
               <div key={day.toISOString()} onClick={() => openModal(format(day, 'yyyy-MM-dd'))}
-                className={cn('p-2 border-b border-r border-gray-100 text-center cursor-pointer hover:bg-gray-50', isToday(day) && 'bg-aas-blue-50')}>
+                className={cn('p-2 border-b border-r border-gray-100 text-center cursor-pointer hover:bg-gray-50', isToday(day) && 'bg-blue-50')}>
                 <p className="text-xs text-gray-400">{format(day, 'EEE')}</p>
                 <p className={cn('text-sm font-semibold', isToday(day) ? 'text-aas-blue' : 'text-gray-700')}>{format(day, 'd')}</p>
                 {bh && <p className="text-[10px] text-purple-600 truncate">{bh}</p>}
@@ -259,10 +297,12 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
           })}
           {days.map(day => {
             const dayEvents = getEventsForDay(day);
+            const dayTasks = getTasksForDay(day);
             return (
               <div key={day.toISOString()} onClick={() => openModal(format(day, 'yyyy-MM-dd'))}
-                className={cn('p-1.5 border-r border-b border-gray-50 min-h-32 space-y-1 cursor-pointer hover:bg-gray-50/70', isToday(day) && 'bg-aas-blue-50/50')}>
+                className={cn('p-1.5 border-r border-b border-gray-50 min-h-32 space-y-1 cursor-pointer hover:bg-gray-50/70', isToday(day) && 'bg-blue-50/50')}>
                 {dayEvents.map(ev => <EventChip key={ev.id} event={ev} />)}
+                {dayTasks.map(t => <TaskChip key={t.id} task={t} />)}
               </div>
             );
           })}
@@ -271,6 +311,7 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
     );
   }
 
+  // ── Timeline view ───────────────────────────────────────────
   function TimelineView() {
     const staff = allStaff ?? [];
     const timelineStart = startOfWeek(current, { weekStartsOn: 1 });
@@ -301,13 +342,16 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
                 const bh = bankHolidayMap.get(dayStr);
                 const dayEvents = events.filter(e => {
                   if (e.user_id !== s.id) return false;
-                  const start = e.start_datetime.split('T')[0];
-                  const end = e.end_datetime.split('T')[0];
-                  return dayStr >= start && dayStr <= end;
+                  const st = e.start_datetime.split('T')[0];
+                  const en = e.end_datetime.split('T')[0];
+                  return dayStr >= st && dayStr <= en;
                 });
                 const ev = dayEvents[0];
                 const colour = ev ? CALENDAR_EVENT_COLOURS[ev.event_type] : bh ? 'bg-purple-100' : '';
-                return <div key={dayStr} title={ev ? (ev.title ?? CALENDAR_EVENT_LABELS[ev.event_type]) : bh ?? ''} className={cn('flex-1 min-w-[28px] border-r border-gray-50 py-2', colour)} />;
+                return (
+                  <div key={dayStr} title={ev ? (ev.title ?? CALENDAR_EVENT_LABELS[ev.event_type]) : bh ?? ''}
+                    className={cn('flex-1 min-w-[28px] border-r border-gray-50 py-2', colour)} />
+                );
               })}
             </div>
           ))}
@@ -316,19 +360,25 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
     );
   }
 
+  // ── Day view ───────────────────────────────────────────────
   function DayView() {
     const dayStr = format(current, 'yyyy-MM-dd');
     const dayEvents = getEventsForDay(current);
+    const dayTasks = getTasksForDay(current);
     const bh = bankHolidayMap.get(dayStr);
+    const hasAnything = dayEvents.length > 0 || dayTasks.length > 0;
 
     return (
       <div className="flex-1 overflow-auto p-4 space-y-3">
         {bh && <div className="rounded-lg bg-purple-50 border border-purple-100 px-4 py-2 text-sm text-purple-700 font-medium">Bank Holiday: {bh}</div>}
-        {dayEvents.length === 0 ? (
+
+        {!hasAnything && (
           <div onClick={() => openModal(dayStr)} className="text-center py-12 text-sm text-gray-400 cursor-pointer hover:text-aas-blue border-2 border-dashed border-gray-200 rounded-xl hover:border-aas-blue transition-colors">
             + Tap to add event
           </div>
-        ) : dayEvents.map(ev => {
+        )}
+
+        {dayEvents.map(ev => {
           const colour = CALENDAR_EVENT_COLOURS[ev.event_type];
           const user = ev.user as Pick<Profile, 'full_name'> | undefined;
           const customer = ev.customer as { company_name: string } | undefined;
@@ -348,7 +398,26 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
             </div>
           );
         })}
-        {dayEvents.length > 0 && (
+
+        {dayTasks.map(t => (
+          <div key={t.id} className="rounded-xl border p-4 bg-blue-50 border-blue-200">
+            <div className="flex items-start justify-between gap-2">
+              <div>
+                <p className="text-xs font-semibold text-blue-600 mb-1">Task</p>
+                <p className="font-medium text-sm text-gray-800">{t.title}</p>
+                {t.customer?.company_name && <p className="text-xs text-gray-500 mt-0.5">{t.customer.company_name}</p>}
+                {t.notes && <p className="text-xs mt-1 text-gray-400">{t.notes}</p>}
+              </div>
+              <span className={`text-xs px-2 py-0.5 rounded-full font-medium shrink-0 ${
+                t.priority === 'urgent' ? 'bg-red-100 text-red-700' :
+                t.priority === 'high' ? 'bg-orange-100 text-orange-700' :
+                'bg-gray-100 text-gray-600'
+              }`}>{t.priority}</span>
+            </div>
+          </div>
+        ))}
+
+        {hasAnything && (
           <button onClick={() => openModal(dayStr)} className="w-full py-2.5 border-2 border-dashed border-gray-200 rounded-xl text-sm text-gray-400 hover:border-aas-blue hover:text-aas-blue transition-colors">
             + Add another event
           </button>
@@ -357,6 +426,7 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
     );
   }
 
+  // ── Add Event Modal ────────────────────────────────────────
   function AddEventModal() {
     const inputClass = 'w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-aas-blue';
     const showCustomerLocation = ['customer_visit', 'farm_work', 'site_work', 'meeting', 'general_work'].includes(eventType);
@@ -498,7 +568,10 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
       <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-100 bg-white shrink-0 flex-wrap gap-y-2">
         <div className="flex rounded-lg border border-gray-200 overflow-hidden text-xs">
           {VIEWS.filter(v => v !== 'timeline' || isManagerOrAdmin).map(v => (
-            <button key={v} onClick={() => setView(v)} className={cn('px-3 py-1.5 font-medium capitalize transition-colors', view === v ? 'bg-aas-blue text-white' : 'text-gray-600 hover:bg-gray-50')}>{v}</button>
+            <button key={v} onClick={() => setView(v)}
+              className={cn('px-3 py-1.5 font-medium capitalize transition-colors', view === v ? 'bg-aas-blue text-white' : 'text-gray-600 hover:bg-gray-50')}>
+              {v}
+            </button>
           ))}
         </div>
         <div className="flex items-center gap-1">
@@ -507,7 +580,8 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
           <button onClick={() => navigate(1)} className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors"><ChevronRight size={16} /></button>
         </div>
         <span className="text-sm font-semibold text-gray-700 flex-1">{format(current, titleFormats[view])}</span>
-        <button onClick={() => openModal(format(current, 'yyyy-MM-dd'))} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-aas-blue text-white text-xs font-medium hover:bg-aas-blue-dark transition-colors">
+        <button onClick={() => openModal(format(current, 'yyyy-MM-dd'))}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-aas-blue text-white text-xs font-medium hover:bg-aas-blue-dark transition-colors">
           <Plus size={14} />Add event
         </button>
       </div>
@@ -519,6 +593,10 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
             <span className="text-[10px] text-gray-500">{label}</span>
           </div>
         ))}
+        <div className="flex items-center gap-1 shrink-0">
+          <div className="w-2.5 h-2.5 rounded-sm border bg-blue-100 border-blue-200" />
+          <span className="text-[10px] text-gray-500">Task</span>
+        </div>
       </div>
 
       {loading ? (
