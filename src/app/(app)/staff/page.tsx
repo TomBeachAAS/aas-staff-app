@@ -67,7 +67,7 @@ export default async function StaffPage({
                   <p className="text-sm font-medium text-gray-800">{s.full_name}</p>
                   <p className="text-xs text-gray-400">{s.email}</p>
                 </div>
-                <Link href={`/staff/${s.id}/approve`} className="text-xs bg-green-600 text-white px-3 py-1 rounded-lg font-medium hover:bg-green-700">
+                <Link href={`/staff/${s.id}`} className="text-xs bg-green-600 text-white px-3 py-1 rounded-lg font-medium hover:bg-green-700">
                   Approve
                 </Link>
               </div>
