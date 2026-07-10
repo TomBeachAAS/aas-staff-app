@@ -3,7 +3,12 @@ import { redirect } from 'next/navigation';
 import { NewTaskForm } from '@/components/tasks/NewTaskForm';
 
 export default async function NewTaskPage() {
+    searchParams,
+}: {
+  searchParams: Promise<{ date?: string }>;
+}) {
   const supabase = await createClient();
+  const sp = await searchParams;
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect('/login');
 
@@ -23,6 +28,7 @@ export default async function NewTaskPage() {
     <div className="p-4 max-w-2xl mx-auto">
       <h2 className="text-lg font-bold text-gray-800 mb-5">New task</h2>
       <NewTaskForm
+        initialDate={sp.date}
         userId={user.id}
         staff={staff ?? []}
         customers={customers ?? []}
