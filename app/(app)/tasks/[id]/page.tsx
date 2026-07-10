@@ -1,0 +1,121 @@
+import { createClient } from '@/lib/supabase/server';
+import { redirect, notFound } from 'next/navigation';
+import { format } from 'date-fns';
+import Link from 'next/link';
+import { TaskStatusBadge } from '@/components/ui/Badge';
+import { Card, CardContent } from '@/components/ui/Card';
+import { TaskCompleteForm } from '@/components/tasks/TaskCompleteForm';
+
+export const dynamic = 'force-dynamic';
+
+export default async function TaskDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) redirect('/login');
+
+  const { data: task } = await supabase
+    .from('tasks')
+    .select('*, assignees:task_assignees(user_id, user:profiles(full_name)), customer:customers(company_name), location:locations(name, address_line1, postcode, latitude, longitude), created_by_profile:profiles!tasks_created_by_fkey(full_name)')
+    .eq('id', id)
+    .single();
+
+  if (!task) notFound();
+
+  const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
+  const isManagerOrAdmin = ['administrator', 'manager'].includes(profile?.role ?? '');
+  const isAssigned = (task.assignees as {user_id: string}[]).some(a => a.user_id === user.id);
+  const canComplete = isAssigned || task.created_by === user.id || isManagerOrAdmin;
+
+  const customer = task.customer as {company_name: string} | undefined;
+  const location = task.location as {name: string; address_line1?: string; postcode?: string; latitude?: number; longitude?: number} | undefined;
+  const creator = task.created_by_profile as {full_name: string} | undefined;
+  const assignees = (task.assignees as {user_id: string; user: {full_name: string}}[]) ?? [];
+
+  return (
+    <div className="p-4 space-y-4 max-w-2xl mx-auto">
+      <div className="flex items-start justify-between gap-3">
+        <h2 className="text-xl font-bold text-gray-800">{task.title}</h2>
+        <TaskStatusBadge status={task.status} />
+      </div>
+
+      {task.task_date && (
+        <p className="text-sm text-gray-500">
+          {format(new Date(task.task_date), 'EEEE, d MMMM yyyy')}
+          {task.start_time ? ` — ${task.start_time.slice(0, 5)}${task.end_time ? ` to ${task.end_time.slice(0, 5)}` : ''}` : ''}
+        </p>
+      )}
+
+      {task.description && (
+        <Card><CardContent><p className="text-sm text-gray-700 whitespace-pre-wrap">{task.description}</p></CardContent></Card>
+      )}
+
+      <div className="grid grid-cols-2 gap-3">
+        {customer && (
+          <div className="bg-white rounded-xl border border-gray-100 p-3">
+            <p className="text-xs text-gray-400 mb-0.5">Customer</p>
+            <p className="text-sm font-medium text-gray-800">{customer.company_name}</p>
+          </div>
+        )}
+        {location && (
+          <div className="bg-white rounded-xl border border-gray-100 p-3">
+            <p className="text-xs text-gray-400 mb-0.5">Location</p>
+            <p className="text-sm font-medium text-gray-800">{location.name}</p>
+            {location.postcode && <p className="text-xs text-gray-400">{location.postcode}</p>}
+            {location.latitude && location.longitude && (
+              <a
+                href={`https://maps.google.com/?q=${location.latitude},${location.longitude}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs text-aas-blue hover:underline"
+              >
+                Open in Maps
+              </a>
+            )}
+          </div>
+        )}
+      </div>
+
+      {assignees.length > 0 && (
+        <div className="bg-white rounded-xl border border-gray-100 p-3">
+          <p className="text-xs text-gray-400 mb-1">Assigned to</p>
+          <div className="flex flex-wrap gap-1.5">
+            {assignees.map(a => (
+              <span key={a.user_id} className="text-xs bg-aas-blue-pale text-aas-blue px-2 py-0.5 rounded-full font-medium">
+                {a.user?.full_name}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {creator && (
+        <p className="text-xs text-gray-400">Created by {creator.full_name}</p>
+      )}
+
+      {task.notes && (
+        <Card>
+          <CardContent>
+            <p className="text-xs text-gray-400 mb-1">Notes</p>
+            <p className="text-sm text-gray-700 whitespace-pre-wrap">{task.notes}</p>
+          </CardContent>
+        </Card>
+      )}
+
+      {task.status === 'completed' && task.completed_at && (
+        <div className="bg-green-50 rounded-xl border border-green-100 p-3">
+          <p className="text-xs text-green-600 font-medium">Completed {format(new Date(task.completed_at), 'd MMM yyyy HH:mm')}</p>
+          {task.completion_notes && <p className="text-sm text-green-700 mt-1">{task.completion_notes}</p>}
+        </div>
+      )}
+
+      {canComplete && !['completed', 'cancelled'].includes(task.status) && (
+        <TaskCompleteForm taskId={task.id} userId={user.id} />
+      )}
+
+      <div className="flex gap-2">
+        <Link href="/tasks" className="text-sm text-aas-blue hover:underline">← Back to tasks</Link>
+      </div>
+    </div>
+  );
+}
