@@ -2,14 +2,14 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, Calendar, CheckSquare, Umbrella, MoreHorizontal } from 'lucide-react';
+import { LayoutDashboard, Calendar, CheckSquare, ClipboardList, MoreHorizontal } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const items = [
   { href: '/dashboard', icon: LayoutDashboard, label: 'Home' },
   { href: '/calendar', icon: Calendar, label: 'Calendar' },
   { href: '/tasks', icon: CheckSquare, label: 'Tasks' },
-  { href: '/holidays', icon: Umbrella, label: 'Holiday' },
+  { href: '/jobs', icon: ClipboardList, label: 'Jobs' },
   { href: '/more', icon: MoreHorizontal, label: 'More' },
 ];
 
