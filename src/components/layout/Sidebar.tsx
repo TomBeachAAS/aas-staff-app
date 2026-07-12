@@ -1,12 +1,11 @@
 'use client';
 
 import Link from 'next/link';
-import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import {
   LayoutDashboard, Calendar, Umbrella, Stethoscope, CheckSquare,
-  Users, Building2, MapPin, Truck, Clock, Receipt, Navigation,
-  BarChart3, Settings, Bell, LogOut, ChevronLeft, ChevronRight
+  ClipboardList, Users, Building2, MapPin, Truck, Clock, Receipt,
+  Navigation, BarChart3, Settings, Bell, LogOut, ChevronLeft, ChevronRight
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { logout } from '@/lib/auth-actions';
@@ -19,6 +18,7 @@ const navItems = [
   { href: '/holidays', icon: Umbrella, label: 'Holidays' },
   { href: '/sickness', icon: Stethoscope, label: 'Sickness' },
   { href: '/tasks', icon: CheckSquare, label: 'Tasks' },
+  { href: '/jobs', icon: ClipboardList, label: 'Job Board' },
 ];
 
 const managerItems = [
@@ -69,21 +69,21 @@ export function Sidebar({ profile }: SidebarProps) {
       'hidden lg:flex flex-col h-screen bg-white border-r border-gray-100 transition-all duration-200 shrink-0',
       collapsed ? 'w-16' : 'w-56'
     )}>
- {/* Logo */}
-<div className="flex items-center gap-3 px-4 py-4 border-b border-gray-100">
-  {collapsed ? (
-    <div className="w-8 h-8 rounded-lg bg-white flex items-center justify-center shrink-0 overflow-hidden">
-      <img src="/logo.png" alt="AAS" className="w-8 h-8 object-contain" />
-    </div>
-  ) : (
-    <img src="/logo.png" alt="Autonomous Agri Solutions" className="h-10 w-auto object-contain" />
-  )}
-        <button onClick={() => setCollapsed(!collapsed)} className="text-gray-400 hover:text-gray-600 shrink-0">
+      <div className="flex items-center gap-3 px-4 py-4 border-b border-gray-100">
+        <div className="w-8 h-8 rounded-lg bg-aas-blue flex items-center justify-center shrink-0">
+          <span className="text-white font-bold text-xs">AAS</span>
+        </div>
+        {!collapsed && (
+          <div className="min-w-0">
+            <p className="text-sm font-bold text-aas-blue-dark truncate">AAS Staff</p>
+            <p className="text-xs text-gray-400 truncate">Portal</p>
+          </div>
+        )}
+        <button onClick={() => setCollapsed(!collapsed)} className="ml-auto text-gray-400 hover:text-gray-600 shrink-0">
           {collapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
         </button>
       </div>
 
-      {/* Nav */}
       <nav className="flex-1 overflow-y-auto px-2 py-3 space-y-0.5">
         {navItems.map(item => <NavItem key={item.href} {...item} />)}
 
@@ -107,7 +107,6 @@ export function Sidebar({ profile }: SidebarProps) {
         )}
       </nav>
 
-      {/* User footer */}
       <div className="border-t border-gray-100 px-2 py-3 space-y-0.5">
         <NavItem href="/notifications" icon={Bell} label="Notifications" />
         <form action={logout}>
