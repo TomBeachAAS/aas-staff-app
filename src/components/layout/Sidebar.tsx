@@ -69,17 +69,15 @@ export function Sidebar({ profile }: SidebarProps) {
       'hidden lg:flex flex-col h-screen bg-white border-r border-gray-100 transition-all duration-200 shrink-0',
       collapsed ? 'w-16' : 'w-56'
     )}>
-      {/* Logo */}
-      <div className="flex items-center gap-2 px-3 py-3 border-b border-gray-100">
-        {collapsed ? (
-          <div className="w-9 h-9 rounded-lg bg-white border border-gray-100 flex items-center justify-center shrink-0 overflow-hidden">
-            <Image src="/logo.png" alt="AAS" width={32} height={32} className="object-contain" />
-          </div>
-        ) : (
-          <div className="flex-1 min-w-0 bg-white rounded-lg px-2 py-1.5">
-            <Image src="/logo.png" alt="Autonomous Agri Solutions" width={180} height={48} className="object-contain w-full h-10" />
-          </div>
-        )}
+ {/* Logo */}
+<div className="flex items-center gap-3 px-4 py-4 border-b border-gray-100">
+  {collapsed ? (
+    <div className="w-8 h-8 rounded-lg bg-white flex items-center justify-center shrink-0 overflow-hidden">
+      <img src="/logo.png" alt="AAS" className="w-8 h-8 object-contain" />
+    </div>
+  ) : (
+    <img src="/logo.png" alt="Autonomous Agri Solutions" className="h-10 w-auto object-contain" />
+  )}
         <button onClick={() => setCollapsed(!collapsed)} className="text-gray-400 hover:text-gray-600 shrink-0">
           {collapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
         </button>
