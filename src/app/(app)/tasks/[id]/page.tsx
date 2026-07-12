@@ -91,7 +91,7 @@ export default async function TaskDetailPage({ params }: { params: Promise<{ id:
             <p className="text-sm font-medium text-gray-800">{location.name}</p>
             {location.postcode && <p className="text-xs text-gray-400">{location.postcode}</p>}
             {location.latitude && location.longitude && (
-              
+              <a
                 href={`https://maps.google.com/?q=${location.latitude},${location.longitude}`}
                 target="_blank"
                 rel="noopener noreferrer"
