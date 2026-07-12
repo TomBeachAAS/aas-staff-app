@@ -13,7 +13,6 @@ import { CALENDAR_EVENT_COLOURS, CALENDAR_EVENT_LABELS, cn } from '@/lib/utils';
 import type { CalendarEvent, BankHoliday, Profile } from '@/types/database';
 
 const VIEWS = ['day', 'week', 'month', 'timeline'] as const;
-const [sickness, setSickness] = useState<any[]>([]);
 type CalView = typeof VIEWS[number];
 
 interface Props {
@@ -47,15 +46,14 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [tasks, setTasks] = useState<any[]>([]);
   const [holidays, setHolidays] = useState<any[]>([]);
+  const [sickness, setSickness] = useState<any[]>([]);
   const [completedJobs, setCompletedJobs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const isManagerOrAdmin = ['administrator', 'manager'].includes(profile.role);
 
-  // Day panel state
   const [dayPanelOpen, setDayPanelOpen] = useState(false);
   const [dayPanelDate, setDayPanelDate] = useState<string | null>(null);
 
-  // Modal state
   const [modalOpen, setModalOpen] = useState(false);
   const [modalDate, setModalDate] = useState(format(new Date(), 'yyyy-MM-dd'));
   const [eventType, setEventType] = useState('general_work');
@@ -92,12 +90,8 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
       .gte('start_datetime', start.toISOString())
       .lte('end_datetime', end.toISOString() + 'T23:59:59')
       .order('start_datetime');
+    if (!isManagerOrAdmin) eventsQuery = eventsQuery.eq('user_id', currentUserId);
 
-    if (!isManagerOrAdmin) {
-      eventsQuery = eventsQuery.eq('user_id', currentUserId);
-    }
-
-    // All tasks visible to all staff
     const tasksQuery = supabase
       .from('tasks')
       .select('id, title, task_date, status, priority, customer:customers(company_name)')
@@ -106,7 +100,6 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
       .not('status', 'eq', 'cancelled')
       .order('task_date');
 
-    // Approved holidays — all staff can see
     const holidaysQuery = supabase
       .from('holidays')
       .select('id, user_id, start_date, end_date')
@@ -114,7 +107,6 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
       .gte('end_date', startStr)
       .lte('start_date', endStr);
 
-    // Completed jobs — all staff can see
     const completedJobsQuery = supabase
       .from('job_board')
       .select('id, title, completed_by, completed_at, completion_notes')
@@ -122,17 +114,26 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
       .gte('completed_at', start.toISOString())
       .lte('completed_at', end.toISOString() + 'T23:59:59');
 
+    let sicknessQuery = supabase
+      .from('sickness_records')
+      .select('id, user_id, start_date, end_date')
+      .lte('start_date', endStr)
+      .or(`end_date.is.null,end_date.gte.${startStr}`);
+    if (!isManagerOrAdmin) sicknessQuery = sicknessQuery.eq('user_id', currentUserId);
+
     const [
       { data: eventsData },
       { data: tasksData },
       { data: holidaysData },
       { data: completedJobsData },
-    ] = await Promise.all([eventsQuery, tasksQuery, holidaysQuery, completedJobsQuery]);
+      { data: sicknessData },
+    ] = await Promise.all([eventsQuery, tasksQuery, holidaysQuery, completedJobsQuery, sicknessQuery]);
 
     setEvents((eventsData as CalendarEvent[]) ?? []);
     setTasks(tasksData ?? []);
     setHolidays(holidaysData ?? []);
     setCompletedJobs(completedJobsData ?? []);
+    setSickness(sicknessData ?? []);
     setLoading(false);
   }, [view, current, currentUserId, isManagerOrAdmin]);
 
@@ -173,16 +174,9 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
 
   async function handleSave() {
     setModalError('');
-    if (eventType === 'task') {
-      setModalOpen(false);
-      router.push(`/tasks/new?date=${modalDate}`);
-      return;
-    }
-    if (eventType === 'holiday') {
-      setModalOpen(false);
-      router.push(`/holidays/new?start=${modalDate}&end=${endDate || modalDate}`);
-      return;
-    }
+    if (eventType === 'task') { setModalOpen(false); router.push(`/tasks/new?date=${modalDate}`); return; }
+    if (eventType === 'holiday') { setModalOpen(false); router.push(`/holidays/new?start=${modalDate}&end=${endDate || modalDate}`); return; }
+    if (eventType === 'sickness') { setModalOpen(false); router.push(`/sickness`); return; }
     setSaving(true);
     const supabase = createClient();
     const startDatetime = allDay ? `${modalDate}T00:00:00` : `${modalDate}T${startTime}:00`;
@@ -222,27 +216,27 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
       return dateStr >= s && dateStr <= en;
     });
   }
-
   function getTasksForDay(date: Date) {
     const dateStr = format(date, 'yyyy-MM-dd');
     return tasks.filter(t => t.task_date === dateStr);
   }
-
   function getHolidaysForDay(date: Date) {
     const dateStr = format(date, 'yyyy-MM-dd');
     return holidays.filter(h => dateStr >= h.start_date && dateStr <= h.end_date);
   }
-
+  function getSicknessForDay(date: Date) {
+    const dateStr = format(date, 'yyyy-MM-dd');
+    return sickness.filter(s => dateStr >= s.start_date && (s.end_date === null || dateStr <= s.end_date));
+  }
   function getCompletedJobsForDay(date: Date) {
     const dateStr = format(date, 'yyyy-MM-dd');
     return completedJobs.filter(j => j.completed_at?.split('T')[0] === dateStr);
   }
-
   function getStaffName(userId: string) {
     return allStaff?.find(s => s.id === userId)?.full_name ?? 'Staff';
   }
 
-  // ── Chips ───────────────────────────────────────────────────
+  // ── Chips ──────────────────────────────────────────────────
 
   function EventChip({ event }: { event: CalendarEvent }) {
     const colour = CALENDAR_EVENT_COLOURS[event.event_type] ?? 'bg-gray-100 text-gray-700';
@@ -254,7 +248,6 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
       </div>
     );
   }
-
   function HolidayChip({ holiday }: { holiday: any }) {
     const firstName = getStaffName(holiday.user_id).split(' ')[0];
     return (
@@ -263,7 +256,14 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
       </div>
     );
   }
-
+  function SicknessChip({ record }: { record: any }) {
+    const firstName = getStaffName(record.user_id).split(' ')[0];
+    return (
+      <div className="text-xs px-1.5 py-0.5 rounded border truncate bg-red-100 text-red-800 border-red-200">
+        {firstName}: Sick
+      </div>
+    );
+  }
   function TaskChip({ task }: { task: any }) {
     const isDone = task.status === 'completed';
     return (
@@ -271,16 +271,13 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
         onClick={(e) => { e.stopPropagation(); router.push(`/tasks/${task.id}`); }}
         className={cn(
           'text-xs px-1.5 py-0.5 rounded border truncate cursor-pointer hover:opacity-80',
-          isDone
-            ? 'bg-green-100 text-green-800 border-green-200 line-through'
-            : 'bg-aas-blue text-white border-aas-blue'
+          isDone ? 'bg-green-100 text-green-800 border-green-200 line-through' : 'bg-aas-blue text-white border-aas-blue'
         )}
       >
         ✓ {task.title}
       </div>
     );
   }
-
   function CompletedJobChip({ job }: { job: any }) {
     return (
       <div className="text-xs px-1.5 py-0.5 rounded border truncate bg-orange-100 text-orange-800 border-orange-200">
@@ -289,7 +286,7 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
     );
   }
 
-  // ── Day Detail Panel ────────────────────────────────────────
+  // ── Day Detail Panel ───────────────────────────────────────
 
   function DayDetailPanel() {
     if (!dayPanelDate) return null;
@@ -297,9 +294,10 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
     const dayEvents = getEventsForDay(day);
     const dayTasks = getTasksForDay(day);
     const dayHolidays = getHolidaysForDay(day);
+    const daySickness = getSicknessForDay(day);
     const dayCompletedJobs = getCompletedJobsForDay(day);
     const bh = bankHolidayMap.get(dayPanelDate);
-    const isEmpty = dayEvents.length === 0 && dayTasks.length === 0 && dayHolidays.length === 0 && dayCompletedJobs.length === 0 && !bh;
+    const isEmpty = dayEvents.length === 0 && dayTasks.length === 0 && dayHolidays.length === 0 && daySickness.length === 0 && dayCompletedJobs.length === 0 && !bh;
 
     return (
       <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
@@ -307,18 +305,14 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
         <div className="relative w-full sm:max-w-md bg-white rounded-t-2xl sm:rounded-2xl shadow-xl flex flex-col max-h-[85vh]">
           <div className="flex items-center justify-between px-4 pt-4 pb-3 border-b border-gray-100 shrink-0">
             <h3 className="text-base font-bold text-gray-800">{format(day, 'EEEE d MMMM')}</h3>
-            <button onClick={() => setDayPanelOpen(false)} className="p-1 rounded-lg hover:bg-gray-100">
-              <X size={18} />
-            </button>
+            <button onClick={() => setDayPanelOpen(false)} className="p-1 rounded-lg hover:bg-gray-100"><X size={18} /></button>
           </div>
-
           <div className="overflow-y-auto flex-1 p-4 space-y-3">
             {bh && (
               <div className="rounded-lg bg-purple-50 border border-purple-100 px-3 py-2 text-sm text-purple-700 font-medium">
                 Bank Holiday: {bh}
               </div>
             )}
-
             {dayHolidays.length > 0 && (
               <div className="rounded-xl border border-green-100 bg-green-50 p-3">
                 <p className="text-xs font-semibold text-green-700 mb-1.5">On leave</p>
@@ -331,7 +325,18 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
                 </div>
               </div>
             )}
-
+            {daySickness.length > 0 && (
+              <div className="rounded-xl border border-red-100 bg-red-50 p-3">
+                <p className="text-xs font-semibold text-red-700 mb-1.5">Off sick</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {daySickness.map(s => (
+                    <span key={s.id} className="text-xs bg-red-100 text-red-800 border border-red-200 px-2 py-0.5 rounded-full font-medium">
+                      {getStaffName(s.user_id)}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
             {dayTasks.map(task => {
               const isDone = task.status === 'completed';
               const customer = task.customer as { company_name: string } | undefined;
@@ -339,23 +344,13 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
                 <div
                   key={task.id}
                   onClick={() => { setDayPanelOpen(false); router.push(`/tasks/${task.id}`); }}
-                  className={cn(
-                    'rounded-xl border p-3 cursor-pointer hover:opacity-90 transition-opacity',
-                    isDone ? 'bg-green-50 border-green-100' : 'bg-aas-blue border-aas-blue'
-                  )}
+                  className={cn('rounded-xl border p-3 cursor-pointer hover:opacity-90 transition-opacity', isDone ? 'bg-green-50 border-green-100' : 'bg-aas-blue border-aas-blue')}
                 >
-                  <p className={cn('font-medium text-sm', isDone ? 'text-green-800 line-through' : 'text-white')}>
-                    ✓ {task.title}
-                  </p>
-                  {customer && (
-                    <p className={cn('text-xs mt-0.5', isDone ? 'text-green-600' : 'text-white/80')}>
-                      {customer.company_name}
-                    </p>
-                  )}
+                  <p className={cn('font-medium text-sm', isDone ? 'text-green-800 line-through' : 'text-white')}>✓ {task.title}</p>
+                  {customer && <p className={cn('text-xs mt-0.5', isDone ? 'text-green-600' : 'text-white/80')}>{customer.company_name}</p>}
                 </div>
               );
             })}
-
             {dayEvents.map(ev => {
               const colour = CALENDAR_EVENT_COLOURS[ev.event_type];
               const user = ev.user as Pick<Profile, 'full_name'> | undefined;
@@ -363,20 +358,15 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
               const location = ev.location as { name: string } | undefined;
               return (
                 <div key={ev.id} className={cn('rounded-xl border p-3', colour)}>
-                  {isManagerOrAdmin && user && (
-                    <p className="text-xs font-semibold mb-0.5">{user.full_name}</p>
-                  )}
+                  {isManagerOrAdmin && user && <p className="text-xs font-semibold mb-0.5">{user.full_name}</p>}
                   <p className="font-medium text-sm">{ev.title ?? CALENDAR_EVENT_LABELS[ev.event_type]}</p>
                   {customer && <p className="text-xs mt-0.5">{(customer as any).company_name}</p>}
                   {location && <p className="text-xs">{(location as any).name}</p>}
                   {ev.notes && <p className="text-xs mt-1 opacity-75">{ev.notes}</p>}
-                  <p className="text-xs opacity-50 mt-1">
-                    {ev.all_day ? 'All day' : format(parseISO(ev.start_datetime), 'HH:mm')}
-                  </p>
+                  <p className="text-xs opacity-50 mt-1">{ev.all_day ? 'All day' : format(parseISO(ev.start_datetime), 'HH:mm')}</p>
                 </div>
               );
             })}
-
             {dayCompletedJobs.length > 0 && (
               <div className="rounded-xl border border-orange-100 bg-orange-50 p-3">
                 <p className="text-xs font-semibold text-orange-700 mb-1.5">Jobs completed</p>
@@ -384,19 +374,13 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
                   <div key={j.id} className="text-sm text-orange-800 py-0.5">
                     ✓ {j.title}
                     <span className="text-xs text-orange-600 ml-1">— {getStaffName(j.completed_by)}</span>
-                    {j.completion_notes && (
-                      <p className="text-xs text-orange-600 italic mt-0.5">"{j.completion_notes}"</p>
-                    )}
+                    {j.completion_notes && <p className="text-xs text-orange-600 italic mt-0.5">"{j.completion_notes}"</p>}
                   </div>
                 ))}
               </div>
             )}
-
-            {isEmpty && (
-              <p className="text-sm text-gray-400 text-center py-8">Nothing scheduled for this day</p>
-            )}
+            {isEmpty && <p className="text-sm text-gray-400 text-center py-8">Nothing scheduled for this day</p>}
           </div>
-
           <div className="p-4 border-t border-gray-100 shrink-0">
             <button
               onClick={() => { setDayPanelOpen(false); openModal(dayPanelDate!); }}
@@ -410,7 +394,7 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
     );
   }
 
-  // ── Month view ──────────────────────────────────────────────
+  // ── Month view ─────────────────────────────────────────────
 
   function MonthView() {
     const monthStart = startOfMonth(current);
@@ -433,10 +417,11 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
             const dayEvents = getEventsForDay(day);
             const dayTasks = getTasksForDay(day);
             const dayHolidays = getHolidaysForDay(day);
+            const daySickness = getSicknessForDay(day);
             const dayCompletedJobs = getCompletedJobsForDay(day);
             const bh = bankHolidayMap.get(dayStr);
             const inMonth = isSameMonth(day, current);
-            const totalItems = dayEvents.length + dayTasks.length + dayHolidays.length + dayCompletedJobs.length;
+            const totalItems = dayEvents.length + dayTasks.length + dayHolidays.length + daySickness.length + dayCompletedJobs.length;
             return (
               <div
                 key={dayStr}
@@ -456,6 +441,7 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
                 {bh && <div className="text-[10px] text-purple-600 font-medium truncate mb-0.5">{bh}</div>}
                 <div className="flex-1 overflow-hidden space-y-0.5">
                   {dayHolidays.slice(0, 1).map(h => <HolidayChip key={h.id} holiday={h} />)}
+                  {daySickness.slice(0, 1).map(s => <SicknessChip key={s.id} record={s} />)}
                   {dayTasks.slice(0, 1).map(t => <TaskChip key={t.id} task={t} />)}
                   {dayCompletedJobs.slice(0, 1).map(j => <CompletedJobChip key={j.id} job={j} />)}
                   {dayEvents.slice(0, Math.max(0, 2 - dayTasks.length)).map(ev => <EventChip key={ev.id} event={ev} />)}
@@ -481,16 +467,13 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
           {days.map(day => {
             const bh = bankHolidayMap.get(format(day, 'yyyy-MM-dd'));
             return (
-              <div key={day.toISOString()} className={cn(
-                'p-2 border-b border-r border-gray-100 text-center cursor-pointer hover:bg-gray-50',
-                isToday(day) && 'bg-aas-blue-50'
-              )}
+              <div
+                key={day.toISOString()}
                 onClick={() => openDayPanel(format(day, 'yyyy-MM-dd'))}
+                className={cn('p-2 border-b border-r border-gray-100 text-center cursor-pointer hover:bg-gray-50', isToday(day) && 'bg-aas-blue-50')}
               >
                 <p className="text-xs text-gray-400">{format(day, 'EEE')}</p>
-                <p className={cn('text-sm font-semibold', isToday(day) ? 'text-aas-blue' : 'text-gray-700')}>
-                  {format(day, 'd')}
-                </p>
+                <p className={cn('text-sm font-semibold', isToday(day) ? 'text-aas-blue' : 'text-gray-700')}>{format(day, 'd')}</p>
                 {bh && <p className="text-[10px] text-purple-600 truncate">{bh}</p>}
               </div>
             );
@@ -499,15 +482,16 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
             const dayEvents = getEventsForDay(day);
             const dayTasks = getTasksForDay(day);
             const dayHolidays = getHolidaysForDay(day);
+            const daySickness = getSicknessForDay(day);
             const dayCompletedJobs = getCompletedJobsForDay(day);
             return (
-              <div key={day.toISOString()} className={cn(
-                'p-1.5 border-r border-b border-gray-50 min-h-32 space-y-1 cursor-pointer hover:bg-gray-50/70',
-                isToday(day) && 'bg-aas-blue-50/50'
-              )}
+              <div
+                key={day.toISOString()}
                 onClick={() => openDayPanel(format(day, 'yyyy-MM-dd'))}
+                className={cn('p-1.5 border-r border-b border-gray-50 min-h-32 space-y-1 cursor-pointer hover:bg-gray-50/70', isToday(day) && 'bg-aas-blue-50/50')}
               >
                 {dayHolidays.map(h => <HolidayChip key={h.id} holiday={h} />)}
+                {daySickness.map(s => <SicknessChip key={s.id} record={s} />)}
                 {dayTasks.map(t => <TaskChip key={t.id} task={t} />)}
                 {dayCompletedJobs.map(j => <CompletedJobChip key={j.id} job={j} />)}
                 {dayEvents.map(ev => <EventChip key={ev.id} event={ev} />)}
@@ -519,7 +503,7 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
     );
   }
 
-  // ── Timeline view ───────────────────────────────────────────
+  // ── Timeline view ──────────────────────────────────────────
 
   function TimelineView() {
     const staff = allStaff ?? [];
@@ -545,30 +529,31 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
               );
             })}
           </div>
-          {staff.map(s => (
-            <div key={s.id} className="flex border-b border-gray-50 hover:bg-gray-50/50">
+          {staff.map(member => (
+            <div key={member.id} className="flex border-b border-gray-50 hover:bg-gray-50/50">
               <div className="w-36 shrink-0 border-r border-gray-50 px-3 py-2">
-                <p className="text-xs font-medium text-gray-700 truncate">{s.full_name}</p>
+                <p className="text-xs font-medium text-gray-700 truncate">{member.full_name}</p>
               </div>
               {days.map(day => {
                 const dayStr = format(day, 'yyyy-MM-dd');
                 const bh = bankHolidayMap.get(dayStr);
-                const onHoliday = holidays.some(h => h.user_id === s.id && dayStr >= h.start_date && dayStr <= h.end_date);
+                const onHoliday = holidays.some(h => h.user_id === member.id && dayStr >= h.start_date && dayStr <= h.end_date);
+                const onSick = sickness.some(s => s.user_id === member.id && dayStr >= s.start_date && (s.end_date === null || dayStr <= s.end_date));
                 const dayEvents = events.filter(e => {
-                  if (e.user_id !== s.id) return false;
+                  if (e.user_id !== member.id) return false;
                   const es = e.start_datetime.split('T')[0];
                   const ee = e.end_datetime.split('T')[0];
                   return dayStr >= es && dayStr <= ee;
                 });
                 const ev = dayEvents[0];
-                const colour = onHoliday
-                  ? 'bg-green-200'
+                const colour = onHoliday ? 'bg-green-200'
+                  : onSick ? 'bg-red-200'
                   : ev ? CALENDAR_EVENT_COLOURS[ev.event_type]
                   : bh ? 'bg-purple-100' : '';
                 return (
                   <div
                     key={dayStr}
-                    title={onHoliday ? 'Annual Leave' : ev ? (ev.title ?? CALENDAR_EVENT_LABELS[ev.event_type]) : bh ?? ''}
+                    title={onHoliday ? 'Annual Leave' : onSick ? 'Sick' : ev ? (ev.title ?? CALENDAR_EVENT_LABELS[ev.event_type]) : bh ?? ''}
                     className={cn('flex-1 min-w-[28px] border-r border-gray-50 py-2', colour)}
                   />
                 );
@@ -587,9 +572,10 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
     const dayEvents = getEventsForDay(current);
     const dayTasks = getTasksForDay(current);
     const dayHolidays = getHolidaysForDay(current);
+    const daySickness = getSicknessForDay(current);
     const dayCompletedJobs = getCompletedJobsForDay(current);
     const bh = bankHolidayMap.get(dayStr);
-    const hasItems = dayEvents.length > 0 || dayTasks.length > 0 || dayHolidays.length > 0 || dayCompletedJobs.length > 0;
+    const hasItems = dayEvents.length > 0 || dayTasks.length > 0 || dayHolidays.length > 0 || daySickness.length > 0 || dayCompletedJobs.length > 0;
 
     return (
       <div className="flex-1 overflow-auto p-4 space-y-3">
@@ -598,7 +584,6 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
             Bank Holiday: {bh}
           </div>
         )}
-
         {dayHolidays.length > 0 && (
           <div className="rounded-xl border border-green-100 bg-green-50 p-3">
             <p className="text-xs font-semibold text-green-700 mb-1.5">On leave today</p>
@@ -611,7 +596,18 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
             </div>
           </div>
         )}
-
+        {daySickness.length > 0 && (
+          <div className="rounded-xl border border-red-100 bg-red-50 p-3">
+            <p className="text-xs font-semibold text-red-700 mb-1.5">Off sick today</p>
+            <div className="flex flex-wrap gap-1.5">
+              {daySickness.map(s => (
+                <span key={s.id} className="text-xs bg-red-100 text-red-800 border border-red-200 px-2 py-0.5 rounded-full font-medium">
+                  {getStaffName(s.user_id)}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
         {dayTasks.map(task => {
           const isDone = task.status === 'completed';
           const customer = task.customer as { company_name: string } | undefined;
@@ -619,21 +615,12 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
             <div
               key={task.id}
               onClick={() => router.push(`/tasks/${task.id}`)}
-              className={cn(
-                'rounded-xl border p-4 cursor-pointer hover:opacity-90 transition-opacity',
-                isDone ? 'bg-green-50 border-green-100' : 'bg-aas-blue border-aas-blue'
-              )}
+              className={cn('rounded-xl border p-4 cursor-pointer hover:opacity-90 transition-opacity', isDone ? 'bg-green-50 border-green-100' : 'bg-aas-blue border-aas-blue')}
             >
               <div className="flex items-start justify-between gap-2">
                 <div>
-                  <p className={cn('font-medium text-sm', isDone ? 'text-green-800 line-through' : 'text-white')}>
-                    ✓ {task.title}
-                  </p>
-                  {customer && (
-                    <p className={cn('text-xs mt-0.5', isDone ? 'text-green-600' : 'text-white/80')}>
-                      {customer.company_name}
-                    </p>
-                  )}
+                  <p className={cn('font-medium text-sm', isDone ? 'text-green-800 line-through' : 'text-white')}>✓ {task.title}</p>
+                  {customer && <p className={cn('text-xs mt-0.5', isDone ? 'text-green-600' : 'text-white/80')}>{customer.company_name}</p>}
                 </div>
                 <span className={cn('text-xs shrink-0 px-2 py-0.5 rounded-full font-medium', isDone ? 'bg-green-200 text-green-800' : 'bg-white/20 text-white')}>
                   {isDone ? 'Done' : 'Task'}
@@ -642,7 +629,6 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
             </div>
           );
         })}
-
         {dayEvents.map(ev => {
           const colour = CALENDAR_EVENT_COLOURS[ev.event_type];
           const user = ev.user as Pick<Profile, 'full_name'> | undefined;
@@ -652,9 +638,7 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
             <div key={ev.id} className={cn('rounded-xl border p-4', colour)}>
               <div className="flex items-start justify-between gap-2">
                 <div>
-                  {isManagerOrAdmin && user && (
-                    <p className="text-xs font-semibold mb-1">{user.full_name}</p>
-                  )}
+                  {isManagerOrAdmin && user && <p className="text-xs font-semibold mb-1">{user.full_name}</p>}
                   <p className="font-medium text-sm">{ev.title ?? CALENDAR_EVENT_LABELS[ev.event_type]}</p>
                   {customer && <p className="text-xs mt-0.5">{(customer as any).company_name}</p>}
                   {location && <p className="text-xs">{(location as any).name}</p>}
@@ -667,7 +651,6 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
             </div>
           );
         })}
-
         {dayCompletedJobs.length > 0 && (
           <div className="rounded-xl border border-orange-100 bg-orange-50 p-3">
             <p className="text-xs font-semibold text-orange-700 mb-1.5">Jobs completed today</p>
@@ -679,19 +662,12 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
             ))}
           </div>
         )}
-
         {!hasItems ? (
-          <div
-            onClick={() => openModal(dayStr)}
-            className="text-center py-12 text-sm text-gray-400 cursor-pointer hover:text-aas-blue border-2 border-dashed border-gray-200 rounded-xl hover:border-aas-blue transition-colors"
-          >
+          <div onClick={() => openModal(dayStr)} className="text-center py-12 text-sm text-gray-400 cursor-pointer hover:text-aas-blue border-2 border-dashed border-gray-200 rounded-xl hover:border-aas-blue transition-colors">
             + Tap to add event
           </div>
         ) : (
-          <button
-            onClick={() => openModal(dayStr)}
-            className="w-full py-2.5 border-2 border-dashed border-gray-200 rounded-xl text-sm text-gray-400 hover:border-aas-blue hover:text-aas-blue transition-colors"
-          >
+          <button onClick={() => openModal(dayStr)} className="w-full py-2.5 border-2 border-dashed border-gray-200 rounded-xl text-sm text-gray-400 hover:border-aas-blue hover:text-aas-blue transition-colors">
             + Add another event
           </button>
         )}
@@ -705,6 +681,7 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
     const inputClass = 'w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-aas-blue';
     const showCustomerLocation = ['customer_visit', 'farm_work', 'site_work', 'meeting', 'general_work'].includes(eventType);
     const isTaskOrHoliday = eventType === 'task' || eventType === 'holiday';
+    const isSicknessType = eventType === 'sickness';
 
     return (
       <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
@@ -712,9 +689,7 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
         <div className="relative w-full sm:max-w-md bg-white rounded-t-2xl sm:rounded-2xl shadow-xl flex flex-col max-h-[90vh]">
           <div className="flex items-center justify-between px-4 pt-4 pb-3 border-b border-gray-100 shrink-0">
             <h3 className="text-base font-bold text-gray-800">Add event</h3>
-            <button onClick={() => setModalOpen(false)} className="p-1 rounded-lg hover:bg-gray-100">
-              <X size={18} />
-            </button>
+            <button onClick={() => setModalOpen(false)} className="p-1 rounded-lg hover:bg-gray-100"><X size={18} /></button>
           </div>
           <div className="overflow-y-auto flex-1 p-4 space-y-4">
             {modalError && <div className="p-3 rounded-lg bg-red-50 text-sm text-red-700">{modalError}</div>}
@@ -726,17 +701,14 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
                     key={t.value}
                     type="button"
                     onClick={() => setEventType(t.value)}
-                    className={cn(
-                      'px-3 py-1 rounded-full text-xs font-medium border transition-colors',
-                      eventType === t.value ? t.pill : 'bg-white text-gray-500 border-gray-200 hover:border-gray-400'
-                    )}
+                    className={cn('px-3 py-1 rounded-full text-xs font-medium border transition-colors', eventType === t.value ? t.pill : 'bg-white text-gray-500 border-gray-200 hover:border-gray-400')}
                   >
                     {t.label}
                   </button>
                 ))}
               </div>
             </div>
-            {isManagerOrAdmin && allStaff && allStaff.length > 0 && (
+            {isManagerOrAdmin && allStaff && allStaff.length > 0 && !isSicknessType && (
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">For</label>
                 <select value={targetUserId} onChange={e => setTargetUserId(e.target.value)} className={inputClass}>
@@ -748,32 +720,25 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
             )}
             {!['holiday', 'sickness', 'office', 'home_working', 'travel'].includes(eventType) && (
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Title {isTaskOrHoliday ? '*' : '(optional)'}
-                </label>
-                <input
-                  value={title}
-                  onChange={e => setTitle(e.target.value)}
-                  placeholder={eventType === 'task' ? 'What needs doing?' : 'Add a title…'}
-                  className={inputClass}
-                />
+                <label className="block text-sm font-medium text-gray-700 mb-1">Title {isTaskOrHoliday ? '*' : '(optional)'}</label>
+                <input value={title} onChange={e => setTitle(e.target.value)} placeholder={eventType === 'task' ? 'What needs doing?' : 'Add a title…'} className={inputClass} />
               </div>
             )}
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  {['holiday', 'sickness'].includes(eventType) ? 'From' : 'Date'}
-                </label>
-                <input type="date" value={modalDate} onChange={e => { setModalDate(e.target.value); if (!endDate || endDate < e.target.value) setEndDate(e.target.value); }} className={inputClass} />
-              </div>
-              {['holiday', 'sickness'].includes(eventType) && (
+            {!isSicknessType && (
+              <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">To</label>
-                  <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} min={modalDate} className={inputClass} />
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{['holiday', 'sickness'].includes(eventType) ? 'From' : 'Date'}</label>
+                  <input type="date" value={modalDate} onChange={e => { setModalDate(e.target.value); if (!endDate || endDate < e.target.value) setEndDate(e.target.value); }} className={inputClass} />
                 </div>
-              )}
-            </div>
-            {!isTaskOrHoliday && (
+                {['holiday'].includes(eventType) && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">To</label>
+                    <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} min={modalDate} className={inputClass} />
+                  </div>
+                )}
+              </div>
+            )}
+            {!isTaskOrHoliday && !isSicknessType && (
               <>
                 <label className="flex items-center gap-2 cursor-pointer select-none">
                   <input type="checkbox" checked={allDay} onChange={e => setAllDay(e.target.checked)} className="rounded" />
@@ -811,29 +776,20 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
                 </div>
               </div>
             )}
-            {!isTaskOrHoliday && (
+            {!isTaskOrHoliday && !isSicknessType && (
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
                 <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2} className={`${inputClass} resize-none`} />
               </div>
             )}
-            {eventType === 'task' && (
-              <div className="rounded-lg bg-aas-blue-pale border border-aas-blue/20 px-3 py-2 text-xs text-aas-blue">
-                You'll be taken to the task form with the date pre-filled.
-              </div>
-            )}
-            {eventType === 'holiday' && (
-              <div className="rounded-lg bg-green-50 border border-green-100 px-3 py-2 text-xs text-green-700">
-                You'll be taken to the holiday request form with the dates pre-filled.
-              </div>
-            )}
+            {eventType === 'task' && <div className="rounded-lg bg-aas-blue-pale border border-aas-blue/20 px-3 py-2 text-xs text-aas-blue">You'll be taken to the task form with the date pre-filled.</div>}
+            {eventType === 'holiday' && <div className="rounded-lg bg-green-50 border border-green-100 px-3 py-2 text-xs text-green-700">You'll be taken to the holiday request form with the dates pre-filled.</div>}
+            {isSicknessType && <div className="rounded-lg bg-red-50 border border-red-100 px-3 py-2 text-xs text-red-700">You'll be taken to the sickness page to log the absence.</div>}
           </div>
           <div className="flex gap-3 p-4 border-t border-gray-100 shrink-0">
-            <button type="button" onClick={() => setModalOpen(false)} className="flex-1 py-2.5 border border-gray-200 rounded-lg text-sm text-gray-600">
-              Cancel
-            </button>
+            <button type="button" onClick={() => setModalOpen(false)} className="flex-1 py-2.5 border border-gray-200 rounded-lg text-sm text-gray-600">Cancel</button>
             <button type="button" onClick={handleSave} disabled={saving} className="flex-1 py-2.5 bg-aas-blue text-white rounded-lg text-sm font-medium disabled:opacity-60">
-              {saving ? 'Saving…' : eventType === 'task' ? 'Go to task form →' : eventType === 'holiday' ? 'Go to holiday form →' : 'Save'}
+              {saving ? 'Saving…' : isSicknessType ? 'Go to sickness →' : eventType === 'task' ? 'Go to task form →' : eventType === 'holiday' ? 'Go to holiday form →' : 'Save'}
             </button>
           </div>
         </div>
@@ -857,29 +813,18 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
             <button
               key={v}
               onClick={() => setView(v)}
-              className={cn(
-                'px-3 py-1.5 font-medium capitalize transition-colors',
-                view === v ? 'bg-aas-blue text-white' : 'text-gray-600 hover:bg-gray-50'
-              )}
+              className={cn('px-3 py-1.5 font-medium capitalize transition-colors', view === v ? 'bg-aas-blue text-white' : 'text-gray-600 hover:bg-gray-50')}
             >
               {v}
             </button>
           ))}
         </div>
         <div className="flex items-center gap-1">
-          <button onClick={() => navigate(-1)} className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors">
-            <ChevronLeft size={16} />
-          </button>
-          <button onClick={() => setCurrent(new Date())} className="px-2 py-1 text-xs font-medium text-aas-blue hover:bg-aas-blue-pale rounded">
-            Today
-          </button>
-          <button onClick={() => navigate(1)} className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors">
-            <ChevronRight size={16} />
-          </button>
+          <button onClick={() => navigate(-1)} className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors"><ChevronLeft size={16} /></button>
+          <button onClick={() => setCurrent(new Date())} className="px-2 py-1 text-xs font-medium text-aas-blue hover:bg-aas-blue-pale rounded">Today</button>
+          <button onClick={() => navigate(1)} className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors"><ChevronRight size={16} /></button>
         </div>
-        <span className="text-sm font-semibold text-gray-700 flex-1">
-          {format(current, titleFormats[view])}
-        </span>
+        <span className="text-sm font-semibold text-gray-700 flex-1">{format(current, titleFormats[view])}</span>
         <button
           onClick={() => openModal(format(current, 'yyyy-MM-dd'))}
           className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-aas-blue text-white text-xs font-medium hover:bg-aas-blue-dark transition-colors"
@@ -894,6 +839,10 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
         <div className="flex items-center gap-1 shrink-0">
           <div className="w-2.5 h-2.5 rounded-sm border bg-green-100 border-green-200" />
           <span className="text-[10px] text-gray-500">Leave</span>
+        </div>
+        <div className="flex items-center gap-1 shrink-0">
+          <div className="w-2.5 h-2.5 rounded-sm border bg-red-100 border-red-200" />
+          <span className="text-[10px] text-gray-500">Sickness</span>
         </div>
         <div className="flex items-center gap-1 shrink-0">
           <div className="w-2.5 h-2.5 rounded-sm border bg-aas-blue border-aas-blue" />
