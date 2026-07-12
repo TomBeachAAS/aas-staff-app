@@ -12,6 +12,7 @@ export default function EditTaskPage() {
   const router = useRouter();
   const params = useParams<{ id: string }>();
   const id = params.id;
+
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -27,18 +28,23 @@ export default function EditTaskPage() {
   const [customerId, setCustomerId] = useState('');
   const [locationId, setLocationId] = useState('');
   const [vehicleId, setVehicleId] = useState('');
+  const [selectedAssignees, setSelectedAssignees] = useState<string[]>([]);
+
   const [customers, setCustomers] = useState<{id: string; company_name: string}[]>([]);
   const [locations, setLocations] = useState<{id: string; name: string}[]>([]);
   const [vehicles, setVehicles] = useState<{id: string; registration: string; make?: string}[]>([]);
+  const [staff, setStaff] = useState<{id: string; full_name: string}[]>([]);
 
   useEffect(() => {
     const supabase = createClient();
     Promise.all([
       supabase.from('tasks').select('*').eq('id', id).single(),
+      supabase.from('task_assignees').select('user_id').eq('task_id', id),
       supabase.from('customers').select('id, company_name').eq('is_active', true).order('company_name'),
       supabase.from('locations').select('id, name').eq('is_active', true).order('name'),
       supabase.from('vehicles').select('id, registration, make').eq('is_active', true).order('registration'),
-    ]).then(([{ data: task }, { data: c }, { data: l }, { data: v }]) => {
+      supabase.from('profiles').select('id, full_name').eq('status', 'active').order('full_name'),
+    ]).then(([{ data: task }, { data: assignees }, { data: c }, { data: l }, { data: v }, { data: s }]) => {
       if (task) {
         setTitle(task.title ?? '');
         setDescription(task.description ?? '');
@@ -53,19 +59,28 @@ export default function EditTaskPage() {
         setLocationId(task.location_id ?? '');
         setVehicleId(task.vehicle_id ?? '');
       }
+      setSelectedAssignees((assignees ?? []).map(a => a.user_id));
       setCustomers(c ?? []);
       setLocations(l ?? []);
       setVehicles(v ?? []);
+      setStaff(s ?? []);
       setLoading(false);
     });
   }, [id]);
+
+  function toggleAssignee(userId: string) {
+    setSelectedAssignees(prev =>
+      prev.includes(userId) ? prev.filter(id => id !== userId) : [...prev, userId]
+    );
+  }
 
   async function handleSave() {
     if (!title.trim()) { setError('Title is required'); return; }
     setSaving(true);
     setError('');
     const supabase = createClient();
-    const { error: err } = await supabase.from('tasks').update({
+
+    const { error: taskErr } = await supabase.from('tasks').update({
       title: title.trim(),
       description: description || null,
       task_date: taskDate || null,
@@ -79,8 +94,18 @@ export default function EditTaskPage() {
       location_id: locationId || null,
       vehicle_id: vehicleId || null,
     }).eq('id', id);
+
+    if (taskErr) { setError(taskErr.message); setSaving(false); return; }
+
+    // Update assignees: delete all then re-insert
+    await supabase.from('task_assignees').delete().eq('task_id', id);
+    if (selectedAssignees.length > 0) {
+      await supabase.from('task_assignees').insert(
+        selectedAssignees.map(userId => ({ task_id: id, user_id: userId }))
+      );
+    }
+
     setSaving(false);
-    if (err) { setError(err.message); return; }
     router.push(`/tasks/${id}`);
   }
 
@@ -150,6 +175,26 @@ export default function EditTaskPage() {
           </div>
         </div>
       )}
+
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">Assigned to</label>
+        <div className="flex flex-wrap gap-2">
+          {staff.map(s => (
+            <button
+              key={s.id}
+              type="button"
+              onClick={() => toggleAssignee(s.id)}
+              className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
+                selectedAssignees.includes(s.id)
+                  ? 'bg-aas-blue text-white border-aas-blue'
+                  : 'bg-white text-gray-600 border-gray-200 hover:border-gray-400'
+              }`}
+            >
+              {s.full_name}
+            </button>
+          ))}
+        </div>
+      </div>
 
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-1">Customer</label>
