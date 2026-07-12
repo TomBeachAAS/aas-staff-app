@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import {
   format, startOfMonth, endOfMonth, startOfWeek, endOfWeek,
   addDays, addMonths, addWeeks, subMonths, subWeeks,
-  isSameMonth, isSameDay, isToday, parseISO, eachDayOfInterval
+  isSameMonth, isToday, parseISO, eachDayOfInterval
 } from 'date-fns';
 import { ChevronLeft, ChevronRight, Plus, X } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
@@ -48,6 +48,10 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
   const [holidays, setHolidays] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const isManagerOrAdmin = ['administrator', 'manager'].includes(profile.role);
+
+  // Day panel state
+  const [dayPanelOpen, setDayPanelOpen] = useState(false);
+  const [dayPanelDate, setDayPanelDate] = useState<string | null>(null);
 
   // Modal state
   const [modalOpen, setModalOpen] = useState(false);
@@ -131,6 +135,11 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
       setLocations(l ?? []);
     });
   }, [modalOpen]);
+
+  function openDayPanel(dateStr: string) {
+    setDayPanelDate(dateStr);
+    setDayPanelOpen(true);
+  }
 
   function openModal(dateStr: string) {
     setModalDate(dateStr);
@@ -251,6 +260,110 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
     );
   }
 
+  // ── Day Detail Panel ────────────────────────────────────────
+  function DayDetailPanel() {
+    if (!dayPanelDate) return null;
+    const day = parseISO(dayPanelDate);
+    const dayEvents = getEventsForDay(day);
+    const dayTasks = getTasksForDay(day);
+    const dayHolidays = getHolidaysForDay(day);
+    const bh = bankHolidayMap.get(dayPanelDate);
+    const isEmpty = dayEvents.length === 0 && dayTasks.length === 0 && dayHolidays.length === 0 && !bh;
+
+    return (
+      <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
+        <div className="absolute inset-0 bg-black/40" onClick={() => setDayPanelOpen(false)} />
+        <div className="relative w-full sm:max-w-md bg-white rounded-t-2xl sm:rounded-2xl shadow-xl flex flex-col max-h-[85vh]">
+          <div className="flex items-center justify-between px-4 pt-4 pb-3 border-b border-gray-100 shrink-0">
+            <h3 className="text-base font-bold text-gray-800">{format(day, 'EEEE d MMMM')}</h3>
+            <button onClick={() => setDayPanelOpen(false)} className="p-1 rounded-lg hover:bg-gray-100">
+              <X size={18} />
+            </button>
+          </div>
+
+          <div className="overflow-y-auto flex-1 p-4 space-y-3">
+            {bh && (
+              <div className="rounded-lg bg-purple-50 border border-purple-100 px-3 py-2 text-sm text-purple-700 font-medium">
+                Bank Holiday: {bh}
+              </div>
+            )}
+
+            {dayHolidays.length > 0 && (
+              <div className="rounded-xl border border-green-100 bg-green-50 p-3">
+                <p className="text-xs font-semibold text-green-700 mb-1.5">On leave</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {dayHolidays.map(h => (
+                    <span key={h.id} className="text-xs bg-green-100 text-green-800 border border-green-200 px-2 py-0.5 rounded-full font-medium">
+                      {getStaffName(h.user_id)}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {dayTasks.map(task => {
+              const isDone = task.status === 'completed';
+              const customer = task.customer as { company_name: string } | undefined;
+              return (
+                <div
+                  key={task.id}
+                  onClick={() => { setDayPanelOpen(false); router.push(`/tasks/${task.id}`); }}
+                  className={cn(
+                    'rounded-xl border p-3 cursor-pointer hover:opacity-90 transition-opacity',
+                    isDone ? 'bg-green-50 border-green-100' : 'bg-aas-blue border-aas-blue'
+                  )}
+                >
+                  <p className={cn('font-medium text-sm', isDone ? 'text-green-800 line-through' : 'text-white')}>
+                    ✓ {task.title}
+                  </p>
+                  {customer && (
+                    <p className={cn('text-xs mt-0.5', isDone ? 'text-green-600' : 'text-white/80')}>
+                      {customer.company_name}
+                    </p>
+                  )}
+                </div>
+              );
+            })}
+
+            {dayEvents.map(ev => {
+              const colour = CALENDAR_EVENT_COLOURS[ev.event_type];
+              const user = ev.user as Pick<Profile, 'full_name'> | undefined;
+              const customer = ev.customer as { company_name: string } | undefined;
+              const location = ev.location as { name: string } | undefined;
+              return (
+                <div key={ev.id} className={cn('rounded-xl border p-3', colour)}>
+                  {isManagerOrAdmin && user && (
+                    <p className="text-xs font-semibold mb-0.5">{user.full_name}</p>
+                  )}
+                  <p className="font-medium text-sm">{ev.title ?? CALENDAR_EVENT_LABELS[ev.event_type]}</p>
+                  {customer && <p className="text-xs mt-0.5">{(customer as any).company_name}</p>}
+                  {location && <p className="text-xs">{(location as any).name}</p>}
+                  {ev.notes && <p className="text-xs mt-1 opacity-75">{ev.notes}</p>}
+                  <p className="text-xs opacity-50 mt-1">
+                    {ev.all_day ? 'All day' : format(parseISO(ev.start_datetime), 'HH:mm')}
+                  </p>
+                </div>
+              );
+            })}
+
+            {isEmpty && (
+              <p className="text-sm text-gray-400 text-center py-8">Nothing scheduled for this day</p>
+            )}
+          </div>
+
+          <div className="p-4 border-t border-gray-100 shrink-0">
+            <button
+              onClick={() => { setDayPanelOpen(false); openModal(dayPanelDate!); }}
+              className="w-full py-2.5 bg-aas-blue text-white rounded-xl text-sm font-medium hover:bg-aas-blue-dark transition-colors"
+            >
+              + Add event or task
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   // ── Month view ──────────────────────────────────────────────
   function MonthView() {
     const monthStart = startOfMonth(current);
@@ -279,7 +392,7 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
             return (
               <div
                 key={dayStr}
-                onClick={() => openModal(dayStr)}
+                onClick={() => openDayPanel(dayStr)}
                 className={cn(
                   'border-b border-r border-gray-50 p-1 min-h-0 flex flex-col overflow-hidden cursor-pointer hover:bg-gray-50 transition-colors',
                   !inMonth && 'bg-gray-50/50',
@@ -326,7 +439,7 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
                 'p-2 border-b border-r border-gray-100 text-center cursor-pointer hover:bg-gray-50',
                 isToday(day) && 'bg-aas-blue-50'
               )}
-                onClick={() => openModal(format(day, 'yyyy-MM-dd'))}
+                onClick={() => openDayPanel(format(day, 'yyyy-MM-dd'))}
               >
                 <p className="text-xs text-gray-400">{format(day, 'EEE')}</p>
                 <p className={cn('text-sm font-semibold', isToday(day) ? 'text-aas-blue' : 'text-gray-700')}>
@@ -345,7 +458,7 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
                 'p-1.5 border-r border-b border-gray-50 min-h-32 space-y-1 cursor-pointer hover:bg-gray-50/70',
                 isToday(day) && 'bg-aas-blue-50/50'
               )}
-                onClick={() => openModal(format(day, 'yyyy-MM-dd'))}
+                onClick={() => openDayPanel(format(day, 'yyyy-MM-dd'))}
               >
                 {dayHolidays.map(h => <HolidayChip key={h.id} holiday={h} />)}
                 {dayTasks.map(t => <TaskChip key={t.id} task={t} />)}
@@ -434,8 +547,6 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
             Bank Holiday: {bh}
           </div>
         )}
-
-        {/* Who's on leave */}
         {dayHolidays.length > 0 && (
           <div className="rounded-xl border border-green-100 bg-green-50 p-3">
             <p className="text-xs font-semibold text-green-700 mb-1.5">On leave today</p>
@@ -448,8 +559,6 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
             </div>
           </div>
         )}
-
-        {/* Tasks */}
         {dayTasks.map(task => {
           const isDone = task.status === 'completed';
           const customer = task.customer as { company_name: string } | undefined;
@@ -480,8 +589,6 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
             </div>
           );
         })}
-
-        {/* Calendar events */}
         {dayEvents.map(ev => {
           const colour = CALENDAR_EVENT_COLOURS[ev.event_type];
           const user = ev.user as Pick<Profile, 'full_name'> | undefined;
@@ -495,8 +602,8 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
                     <p className="text-xs font-semibold mb-1">{user.full_name}</p>
                   )}
                   <p className="font-medium text-sm">{ev.title ?? CALENDAR_EVENT_LABELS[ev.event_type]}</p>
-                  {customer && <p className="text-xs mt-0.5">{customer.company_name}</p>}
-                  {location && <p className="text-xs">{location.name}</p>}
+                  {customer && <p className="text-xs mt-0.5">{(customer as any).company_name}</p>}
+                  {location && <p className="text-xs">{(location as any).name}</p>}
                   {ev.notes && <p className="text-xs mt-1 opacity-75">{ev.notes}</p>}
                 </div>
                 <span className="text-xs opacity-60 shrink-0">
@@ -506,7 +613,6 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
             </div>
           );
         })}
-
         {!hasItems ? (
           <div
             onClick={() => openModal(dayStr)}
@@ -746,6 +852,7 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
         </>
       )}
 
+      {dayPanelOpen && <DayDetailPanel />}
       {modalOpen && <AddEventModal />}
     </div>
   );
