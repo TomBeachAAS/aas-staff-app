@@ -5,11 +5,7 @@ import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 
 interface Props {
-  job: {
-    id: string;
-    status: string;
-    claimed_by: string | null;
-  };
+  job: { id: string; status: string; claimed_by: string | null };
   currentUserId: string;
   isManagerOrAdmin: boolean;
 }
@@ -21,7 +17,6 @@ export function JobActionButtons({ job, currentUserId, isManagerOrAdmin }: Props
   const [showCompleteForm, setShowCompleteForm] = useState(false);
   const [completionNotes, setCompletionNotes] = useState('');
   const [showRejectForm, setShowRejectForm] = useState(false);
-  const [rejectReason, setRejectReason] = useState('');
 
   async function update(updates: Record<string, any>) {
     setLoading(true);
@@ -34,54 +29,47 @@ export function JobActionButtons({ job, currentUserId, isManagerOrAdmin }: Props
   }
 
   const isMyClaim = job.claimed_by === currentUserId;
+  const inputClass = 'w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-aas-blue resize-none';
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-3 pb-6">
       {error && <div className="p-3 rounded-lg bg-red-50 text-sm text-red-700">{error}</div>}
 
       {/* Manager: approve / reject pending job */}
       {isManagerOrAdmin && job.status === 'pending_approval' && (
-        <>
-          {showRejectForm ? (
-            <div className="space-y-2">
-              <textarea
-                value={rejectReason}
-                onChange={e => setRejectReason(e.target.value)}
-                rows={2}
-                placeholder="Reason for rejection (optional)"
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-aas-blue resize-none"
-              />
-              <div className="flex gap-2">
-                <button onClick={() => setShowRejectForm(false)} className="flex-1 py-2.5 border border-gray-200 rounded-lg text-sm text-gray-600">
-                  Cancel
-                </button>
-                <button
-                  onClick={() => update({ status: 'open', rejection_reason: null, approved_by: currentUserId })}
-                  disabled={loading}
-                  className="flex-1 py-2.5 bg-red-600 text-white rounded-lg text-sm font-medium disabled:opacity-60"
-                >
-                  {loading ? 'Saving…' : 'Confirm rejection'}
-                </button>
-              </div>
-            </div>
-          ) : (
+        showRejectForm ? (
+          <div className="space-y-2">
+            <p className="text-sm font-medium text-gray-700">Reason for rejection (optional)</p>
             <div className="flex gap-2">
-              <button
-                onClick={() => setShowRejectForm(true)}
-                className="flex-1 py-2.5 border border-red-200 text-red-600 rounded-lg text-sm font-medium hover:bg-red-50 transition-colors"
-              >
-                Reject
+              <button onClick={() => setShowRejectForm(false)} className="flex-1 py-2.5 border border-gray-200 rounded-lg text-sm text-gray-600">
+                Cancel
               </button>
               <button
-                onClick={() => update({ status: 'open', approved_by: currentUserId })}
+                onClick={() => update({ status: 'rejected', approved_by: currentUserId })}
                 disabled={loading}
-                className="flex-1 py-2.5 bg-green-600 text-white rounded-lg text-sm font-medium disabled:opacity-60 hover:bg-green-700 transition-colors"
+                className="flex-1 py-2.5 bg-red-600 text-white rounded-lg text-sm font-medium disabled:opacity-60"
               >
-                {loading ? 'Saving…' : 'Approve — post job'}
+                {loading ? 'Saving…' : 'Confirm rejection'}
               </button>
             </div>
-          )}
-        </>
+          </div>
+        ) : (
+          <div className="flex gap-2">
+            <button
+              onClick={() => setShowRejectForm(true)}
+              className="flex-1 py-2.5 border border-red-200 text-red-600 rounded-lg text-sm font-medium hover:bg-red-50 transition-colors"
+            >
+              Reject
+            </button>
+            <button
+              onClick={() => update({ status: 'open', approved_by: currentUserId })}
+              disabled={loading}
+              className="flex-1 py-2.5 bg-green-600 text-white rounded-lg text-sm font-medium disabled:opacity-60 hover:bg-green-700 transition-colors"
+            >
+              {loading ? 'Saving…' : 'Approve — post job'}
+            </button>
+          </div>
+        )
       )}
 
       {/* Claim */}
@@ -95,25 +83,18 @@ export function JobActionButtons({ job, currentUserId, isManagerOrAdmin }: Props
         </button>
       )}
 
-      {/* Unclaim / Complete — only the person who claimed it (or a manager) */}
+      {/* Unclaim + Complete — for the claimer or a manager */}
       {job.status === 'in_progress' && (isMyClaim || isManagerOrAdmin) && (
         <>
-          <button
-            onClick={() => update({ status: 'open', claimed_by: null, claimed_at: null })}
-            disabled={loading}
-            className="w-full py-2.5 border border-gray-200 text-gray-600 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors"
-          >
-            {loading ? 'Saving…' : 'Unclaim job'}
-          </button>
-
           {showCompleteForm ? (
             <div className="space-y-2">
+              <p className="text-sm font-medium text-gray-700">Completion notes (optional)</p>
               <textarea
                 value={completionNotes}
                 onChange={e => setCompletionNotes(e.target.value)}
                 rows={3}
-                placeholder="Describe what was done (optional but helpful)…"
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-aas-blue resize-none"
+                placeholder="Describe what was done…"
+                className={inputClass}
               />
               <div className="flex gap-2">
                 <button onClick={() => setShowCompleteForm(false)} className="flex-1 py-2.5 border border-gray-200 rounded-lg text-sm text-gray-600">
@@ -127,7 +108,7 @@ export function JobActionButtons({ job, currentUserId, isManagerOrAdmin }: Props
                     completion_notes: completionNotes.trim() || null,
                   })}
                   disabled={loading}
-                  className="flex-1 py-2.5 bg-green-600 text-white rounded-lg text-sm font-medium disabled:opacity-60 hover:bg-green-700 transition-colors"
+                  className="flex-1 py-2.5 bg-green-600 text-white rounded-lg text-sm font-medium disabled:opacity-60"
                 >
                   {loading ? 'Saving…' : 'Mark complete'}
                 </button>
@@ -139,6 +120,16 @@ export function JobActionButtons({ job, currentUserId, isManagerOrAdmin }: Props
               className="w-full py-2.5 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 transition-colors"
             >
               Mark as complete
+            </button>
+          )}
+
+          {!showCompleteForm && (
+            <button
+              onClick={() => update({ status: 'open', claimed_by: null, claimed_at: null })}
+              disabled={loading}
+              className="w-full py-2.5 border border-gray-200 text-gray-600 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors"
+            >
+              {loading ? 'Saving…' : 'Unclaim job'}
             </button>
           )}
         </>
