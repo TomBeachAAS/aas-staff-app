@@ -2,34 +2,33 @@ import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { Plus, ClipboardList } from 'lucide-react';
+import { Card } from '@/components/ui/Card';
 import { format } from 'date-fns';
 
 export const dynamic = 'force-dynamic';
 
-const PRIORITY_COLOURS: Record<string, string> = {
-  low: 'bg-gray-100 text-gray-600',
-  medium: 'bg-blue-100 text-blue-700',
-  high: 'bg-amber-100 text-amber-700',
-  urgent: 'bg-red-100 text-red-700',
+const STATUS_LABELS: Record<string, string> = {
+  pending_approval: 'Pending approval',
+  open: 'Open',
+  in_progress: 'In progress',
+  completed: 'Completed',
 };
 
 const STATUS_COLOURS: Record<string, string> = {
-  pending_approval: 'bg-amber-100 text-amber-700',
-  open: 'bg-green-100 text-green-700',
-  in_progress: 'bg-blue-100 text-blue-700',
-  completed: 'bg-gray-100 text-gray-600',
-  rejected: 'bg-red-100 text-red-700',
+  pending_approval: 'bg-amber-100 text-amber-800',
+  open: 'bg-blue-100 text-blue-800',
+  in_progress: 'bg-violet-100 text-violet-800',
+  completed: 'bg-green-100 text-green-800',
 };
 
-const STATUS_LABELS: Record<string, string> = {
-  pending_approval: 'Pending Approval',
-  open: 'Open',
-  in_progress: 'In Progress',
-  completed: 'Completed',
-  rejected: 'Rejected',
+const PRIORITY_COLOURS: Record<string, string> = {
+  low: 'bg-gray-100 text-gray-600',
+  medium: 'bg-yellow-100 text-yellow-700',
+  high: 'bg-orange-100 text-orange-700',
+  urgent: 'bg-red-100 text-red-700',
 };
 
-export default async function JobBoardPage({
+export default async function JobsPage({
   searchParams,
 }: {
   searchParams: Promise<{ filter?: string }>;
@@ -42,15 +41,22 @@ export default async function JobBoardPage({
   const isManagerOrAdmin = ['administrator', 'manager'].includes(profile?.role ?? '');
 
   const sp = await searchParams;
-  const filter = sp.filter ?? 'open';
+  const filter = sp.filter ?? 'active';
 
-  let query = supabase.from('job_board').select('*').order('created_at', { ascending: false });
+  let query = supabase
+    .from('job_board')
+    .select('id, title, description, priority, status, created_by, claimed_by, completed_by, completed_at, created_at, customer:customers(company_name), location:locations(name)')
+    .order('created_at', { ascending: false });
 
-  if (filter === 'open') query = query.in('status', ['open', 'in_progress']);
-  else if (filter === 'pending') query = query.eq('status', 'pending_approval');
-  else if (filter === 'completed') query = query.eq('status', 'completed');
+  if (filter === 'active') {
+    query = query.in('status', ['open', 'in_progress']);
+  } else if (filter === 'completed') {
+    query = query.eq('status', 'completed');
+  } else if (filter === 'pending') {
+    query = query.eq('status', 'pending_approval');
+  }
 
-  const { data: jobs } = await query.limit(100);
+  const { data: jobs } = await query.limit(50);
 
   const allUserIds = [...new Set([
     ...(jobs ?? []).map((j: any) => j.created_by).filter(Boolean),
@@ -60,23 +66,25 @@ export default async function JobBoardPage({
   const { data: profileRows } = allUserIds.length > 0
     ? await supabase.from('profiles').select('id, full_name').in('id', allUserIds)
     : { data: [] };
-  const profileMap = Object.fromEntries((profileRows ?? []).map(p => [p.id, p.full_name]));
+  const profileMap = Object.fromEntries((profileRows ?? []).map((p: any) => [p.id, p.full_name]));
 
   let pendingCount = 0;
   if (isManagerOrAdmin) {
     const { count } = await supabase
-      .from('job_board').select('*', { count: 'exact', head: true }).eq('status', 'pending_approval');
+      .from('job_board')
+      .select('*', { count: 'exact', head: true })
+      .eq('status', 'pending_approval');
     pendingCount = count ?? 0;
   }
 
-  const filters = [
-    { key: 'open', label: 'Open / In Progress' },
+  const tabs = [
+    { key: 'active', label: 'Open / In progress' },
     { key: 'completed', label: 'Completed' },
-    ...(isManagerOrAdmin ? [{ key: 'pending', label: `Pending Approval${pendingCount > 0 ? ` (${pendingCount})` : ''}` }] : []),
+    ...(isManagerOrAdmin ? [{ key: 'pending', label: `Pending approval${pendingCount > 0 ? ` (${pendingCount})` : ''}` }] : []),
   ];
 
   return (
-    <div className="p-4 space-y-5 max-w-3xl mx-auto">
+    <div className="p-4 space-y-4 max-w-3xl mx-auto">
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-bold text-gray-800">Job Board</h2>
         <Link
@@ -84,70 +92,73 @@ export default async function JobBoardPage({
           className="flex items-center gap-1.5 px-3 py-2 bg-aas-blue text-white rounded-lg text-sm font-medium hover:bg-aas-blue-dark transition-colors"
         >
           <Plus size={16} />
-          Add Job
+          Add job
         </Link>
       </div>
 
-      {isManagerOrAdmin && pendingCount > 0 && (
-        <div className="rounded-xl bg-amber-50 border border-amber-100 px-4 py-3 flex items-center justify-between">
-          <p className="text-sm text-amber-800 font-medium">{pendingCount} job{pendingCount === 1 ? '' : 's'} awaiting approval</p>
-          <Link href="/jobs?filter=pending" className="text-xs text-amber-700 underline">Review</Link>
-        </div>
-      )}
-
-      <div className="flex gap-2 flex-wrap">
-        {filters.map(f => (
+      <div className="flex gap-1 bg-gray-100 rounded-xl p-1">
+        {tabs.map(t => (
           <Link
-            key={f.key}
-            href={`/jobs?filter=${f.key}`}
-            className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-              filter === f.key
-                ? 'bg-aas-blue text-white'
-                : 'bg-white border border-gray-200 text-gray-600 hover:border-aas-blue hover:text-aas-blue'
+            key={t.key}
+            href={`/jobs?filter=${t.key}`}
+            className={`flex-1 text-center py-1.5 rounded-lg text-xs font-medium transition-colors ${
+              filter === t.key ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500 hover:text-gray-700'
             }`}
           >
-            {f.label}
+            {t.label}
           </Link>
         ))}
       </div>
 
-      <div className="space-y-3">
-        {(jobs ?? []).length === 0 ? (
-          <div className="text-center py-12 text-gray-400">
-            <ClipboardList size={32} className="mx-auto mb-2 opacity-40" />
-            <p className="text-sm">No jobs here</p>
-          </div>
-        ) : (
-          (jobs ?? []).map((job: any) => (
-            <Link key={job.id} href={`/jobs/${job.id}`} className="block bg-white rounded-xl border border-gray-100 shadow-sm p-4 hover:border-aas-blue transition-colors">
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-gray-800">{job.title}</p>
+      <Card>
+        <div className="divide-y divide-gray-50">
+          {(jobs ?? []).length === 0 ? (
+            <div className="text-center py-12 text-sm text-gray-400">
+              <ClipboardList size={32} className="mx-auto mb-2 opacity-30" />
+              No jobs here
+            </div>
+          ) : (
+            (jobs ?? []).map((job: any) => {
+              const customer = job.customer as { company_name: string } | undefined;
+              const location = job.location as { name: string } | undefined;
+              return (
+                <Link key={job.id} href={`/jobs/${job.id}`} className="block px-4 py-3 hover:bg-gray-50 transition-colors">
+                  <div className="flex items-start justify-between gap-2 mb-1">
+                    <p className="text-sm font-medium text-gray-800">{job.title}</p>
+                    <div className="flex gap-1.5 shrink-0">
+                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${PRIORITY_COLOURS[job.priority] ?? 'bg-gray-100 text-gray-600'}`}>
+                        {job.priority}
+                      </span>
+                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${STATUS_COLOURS[job.status] ?? 'bg-gray-100 text-gray-600'}`}>
+                        {STATUS_LABELS[job.status] ?? job.status}
+                      </span>
+                    </div>
+                  </div>
                   {job.description && (
-                    <p className="text-xs text-gray-500 mt-0.5 line-clamp-2">{job.description}</p>
+                    <p className="text-xs text-gray-500 mb-1 line-clamp-2">{job.description}</p>
                   )}
-                  <div className="flex items-center gap-2 mt-2 flex-wrap">
-                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium capitalize ${PRIORITY_COLOURS[job.priority]}`}>
-                      {job.priority}
-                    </span>
-                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${STATUS_COLOURS[job.status]}`}>
-                      {STATUS_LABELS[job.status]}
-                    </span>
+                  <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-gray-400">
+                    {customer && <span>{customer.company_name}</span>}
+                    {location && <span>{location.name}</span>}
                     {job.claimed_by && job.status === 'in_progress' && (
-                      <span className="text-xs text-gray-400">· {profileMap[job.claimed_by] ?? 'Someone'} is on it</span>
+                      <span>Claimed by {profileMap[job.claimed_by] ?? 'someone'}</span>
                     )}
                     {job.completed_by && job.status === 'completed' && (
-                      <span className="text-xs text-gray-400">
-                        · Done by {profileMap[job.completed_by] ?? 'Unknown'} on {format(new Date(job.completed_at), 'd MMM yyyy')}
+                      <span>
+                        Completed by {profileMap[job.completed_by] ?? 'someone'}
+                        {job.completed_at ? ` · ${format(new Date(job.completed_at), 'd MMM')}` : ''}
                       </span>
                     )}
+                    {!job.claimed_by && job.status === 'open' && (
+                      <span className="text-aas-blue font-medium">Available to claim</span>
+                    )}
                   </div>
-                </div>
-              </div>
-            </Link>
-          ))
-        )}
-      </div>
+                </Link>
+              );
+            })
+          )}
+        </div>
+      </Card>
     </div>
   );
 }
