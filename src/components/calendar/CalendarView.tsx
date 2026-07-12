@@ -13,6 +13,7 @@ import { CALENDAR_EVENT_COLOURS, CALENDAR_EVENT_LABELS, cn } from '@/lib/utils';
 import type { CalendarEvent, BankHoliday, Profile } from '@/types/database';
 
 const VIEWS = ['day', 'week', 'month', 'timeline'] as const;
+const [sickness, setSickness] = useState<any[]>([]);
 type CalView = typeof VIEWS[number];
 
 interface Props {
