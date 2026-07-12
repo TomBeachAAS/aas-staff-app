@@ -35,10 +35,10 @@ export default async function HolidaysPage({
   });
   const balance = balanceRows?.[0];
 
-  // My holidays
+  // Holidays — no profile joins to avoid FK ambiguity
   let query = supabase
     .from('holidays')
-    .select('*, user:profiles(full_name), decided_by_profile:profiles!holidays_decided_by_fkey(full_name)')
+    .select('*')
     .order('start_date', { ascending: false });
 
   if (!isManagerOrAdmin || filter !== 'pending') {
@@ -49,6 +49,16 @@ export default async function HolidaysPage({
   }
 
   const { data: holidays } = await query.limit(50);
+
+  // Fetch profiles for user_id and decided_by separately
+  const allUserIds = [...new Set([
+    ...(holidays ?? []).map((h: any) => h.user_id).filter(Boolean),
+    ...(holidays ?? []).map((h: any) => h.decided_by).filter(Boolean),
+  ])];
+  const { data: profileRows } = allUserIds.length > 0
+    ? await supabase.from('profiles').select('id, full_name').in('id', allUserIds)
+    : { data: [] };
+  const profileMap = Object.fromEntries((profileRows ?? []).map(p => [p.id, p.full_name]));
 
   // Bank holidays for the period
   const { data: bankHolidays } = await supabase
@@ -95,7 +105,7 @@ export default async function HolidaysPage({
         {(balance?.adjustments ?? 0) !== 0 && ` (adjusted ${balance?.adjustments! > 0 ? '+' : ''}${balance?.adjustments})`}
       </p>
 
-      {/* Manager: pending approvals */}
+      {/* Manager: pending approvals banner */}
       {isManagerOrAdmin && pendingCount > 0 && (
         <div className="rounded-xl bg-amber-50 border border-amber-100 px-4 py-3 flex items-center justify-between">
           <p className="text-sm text-amber-800 font-medium">
@@ -105,17 +115,19 @@ export default async function HolidaysPage({
         </div>
       )}
 
-      {/* Filter tabs */}
+      {/* Pending approval list */}
       {isManagerOrAdmin && filter === 'pending' && (
         <Card>
           <CardHeader><CardTitle>Pending approval requests</CardTitle></CardHeader>
           <div className="divide-y divide-gray-50">
-            {(holidays ?? []).filter(h => h.status === 'pending').map(h => (
+            {(holidays ?? []).filter((h: any) => h.status === 'pending').length === 0 ? (
+              <CardContent><p className="text-sm text-gray-400 text-center py-4">No pending requests</p></CardContent>
+            ) : (holidays ?? []).filter((h: any) => h.status === 'pending').map((h: any) => (
               <div key={h.id} className="px-4 py-3">
                 <div className="flex items-start justify-between gap-2 mb-2">
                   <div>
                     <p className="text-sm font-medium text-gray-800">
-                      {(h.user as {full_name: string} | undefined)?.full_name ?? 'Unknown'}
+                      {profileMap[h.user_id] ?? 'Unknown'}
                     </p>
                     <p className="text-sm text-gray-600">
                       {format(new Date(h.start_date), 'd MMM')} – {format(new Date(h.end_date), 'd MMM yyyy')}
@@ -151,34 +163,33 @@ export default async function HolidaysPage({
           <CardTitle>My holiday requests</CardTitle>
           <HolidayYearSelector currentYear={leaveYear} options={yearOptions} />
         </CardHeader>
-        {(holidays ?? []).filter(h => isManagerOrAdmin ? h.user_id === user.id : true).length === 0 ? (
+        {(holidays ?? []).filter((h: any) => isManagerOrAdmin ? h.user_id === user.id : true).length === 0 ? (
           <CardContent>
             <p className="text-sm text-gray-400 text-center py-6">No holiday requests for this leave year</p>
           </CardContent>
         ) : (
           <div className="divide-y divide-gray-50">
-            {(holidays ?? []).filter(h => !isManagerOrAdmin || h.user_id === user.id).map(h => {
-              const decided = h.decided_by_profile as {full_name: string} | undefined;
-              return (
-                <Link key={h.id} href={`/holidays/${h.id}`} className="block px-4 py-3 hover:bg-gray-50 transition-colors">
-                  <div className="flex items-start justify-between gap-2">
-                    <div>
-                      <p className="text-sm font-medium text-gray-800">
-                        {format(new Date(h.start_date), 'd MMM')} – {format(new Date(h.end_date), 'd MMM yyyy')}
+            {(holidays ?? []).filter((h: any) => !isManagerOrAdmin || h.user_id === user.id).map((h: any) => (
+              <Link key={h.id} href={`/holidays/${h.id}`} className="block px-4 py-3 hover:bg-gray-50 transition-colors">
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <p className="text-sm font-medium text-gray-800">
+                      {format(new Date(h.start_date), 'd MMM')} – {format(new Date(h.end_date), 'd MMM yyyy')}
+                    </p>
+                    <p className="text-xs text-gray-500">{h.working_days} {h.working_days === 1 ? 'day' : 'days'}</p>
+                    {h.rejection_reason && (
+                      <p className="text-xs text-red-500 mt-0.5">Reason: {h.rejection_reason}</p>
+                    )}
+                    {h.decided_by && h.status !== 'pending' && (
+                      <p className="text-xs text-gray-400 mt-0.5">
+                        {h.status === 'approved' ? 'Approved' : 'Decided'} by {profileMap[h.decided_by] ?? 'Unknown'}
                       </p>
-                      <p className="text-xs text-gray-500">{h.working_days} {h.working_days === 1 ? 'day' : 'days'}</p>
-                      {h.rejection_reason && (
-                        <p className="text-xs text-red-500 mt-0.5">Reason: {h.rejection_reason}</p>
-                      )}
-                      {decided && h.status !== 'pending' && (
-                        <p className="text-xs text-gray-400 mt-0.5">{h.status === 'approved' ? 'Approved' : 'Decided'} by {decided.full_name}</p>
-                      )}
-                    </div>
-                    <HolidayStatusBadge status={h.status} />
+                    )}
                   </div>
-                </Link>
-              );
-            })}
+                  <HolidayStatusBadge status={h.status} />
+                </div>
+              </Link>
+            ))}
           </div>
         )}
       </Card>
@@ -187,7 +198,7 @@ export default async function HolidaysPage({
       <Card>
         <CardHeader><CardTitle>Bank holidays {leaveYearLabel}</CardTitle></CardHeader>
         <div className="divide-y divide-gray-50">
-          {(bankHolidays ?? []).map(bh => (
+          {(bankHolidays ?? []).map((bh: any) => (
             <div key={bh.id} className="px-4 py-2.5 flex items-center justify-between">
               <p className="text-sm text-gray-700">{bh.name}</p>
               <p className="text-xs text-gray-400">{format(new Date(bh.date), 'EEE d MMM yyyy')}</p>
