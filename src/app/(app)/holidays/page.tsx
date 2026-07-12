@@ -7,6 +7,7 @@ import { HolidayStatusBadge } from '@/components/ui/Badge';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { StatCard } from '@/components/ui/StatCard';
 import { getLeaveYear } from '@/lib/utils';
+import { HolidayYearSelector } from '@/components/holidays/HolidayYearSelector';
 
 export const dynamic = 'force-dynamic';
 
@@ -68,6 +69,7 @@ export default async function HolidaysPage({
   }
 
   const leaveYearLabel = `${leaveYear} / ${leaveYear + 1}`;
+  const yearOptions = [-1, 0, 1].map(o => getLeaveYear() + o);
 
   return (
     <div className="p-4 space-y-5 max-w-3xl mx-auto">
@@ -147,16 +149,7 @@ export default async function HolidaysPage({
       <Card>
         <CardHeader className="flex items-center justify-between">
           <CardTitle>My holiday requests</CardTitle>
-          <select
-            defaultValue={String(leaveYear)}
-            onChange={e => window.location.href = `/holidays?year=${e.target.value}`}
-            className="text-xs border border-gray-200 rounded px-2 py-1 text-gray-600"
-          >
-            {[-1, 0, 1].map(offset => {
-              const y = getLeaveYear() + offset;
-              return <option key={y} value={y}>{y}/{y + 1}</option>;
-            })}
-          </select>
+          <HolidayYearSelector currentYear={leaveYear} options={yearOptions} />
         </CardHeader>
         {(holidays ?? []).filter(h => isManagerOrAdmin ? h.user_id === user.id : true).length === 0 ? (
           <CardContent>
