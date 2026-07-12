@@ -5,9 +5,9 @@ import { useRouter } from 'next/navigation';
 import {
   format, startOfMonth, endOfMonth, startOfWeek, endOfWeek,
   addDays, addMonths, addWeeks, subMonths, subWeeks,
-  isSameMonth, isToday, parseISO, eachDayOfInterval
+  isSameMonth, isSameDay, isToday, parseISO, eachDayOfInterval
 } from 'date-fns';
-import { ChevronLeft, ChevronRight, Plus, X, CheckSquare } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus, X } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { CALENDAR_EVENT_COLOURS, CALENDAR_EVENT_LABELS, cn } from '@/lib/utils';
 import type { CalendarEvent, BankHoliday, Profile } from '@/types/database';
@@ -39,22 +39,17 @@ const MODAL_EVENT_TYPES = [
   { value: 'general_work',  label: 'General',       pill: 'bg-gray-100 text-gray-800 border-gray-200' },
 ];
 
-const OFF_TYPES = ['holiday', 'sickness'];
-
 export function CalendarView({ currentUserId, profile, initialView, initialDate, allStaff, bankHolidays }: Props) {
   const router = useRouter();
   const [view, setView] = useState<CalView>(initialView);
   const [current, setCurrent] = useState(() => parseISO(initialDate));
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [tasks, setTasks] = useState<any[]>([]);
+  const [holidays, setHolidays] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const isManagerOrAdmin = ['administrator', 'manager'].includes(profile.role);
 
-  // Day detail panel
-  const [dayDetailOpen, setDayDetailOpen] = useState(false);
-  const [dayDetailDate, setDayDetailDate] = useState('');
-
-  // Add event modal
+  // Modal state
   const [modalOpen, setModalOpen] = useState(false);
   const [modalDate, setModalDate] = useState(format(new Date(), 'yyyy-MM-dd'));
   const [eventType, setEventType] = useState('general_work');
@@ -92,9 +87,12 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
       .lte('end_datetime', end.toISOString() + 'T23:59:59')
       .order('start_datetime');
 
-    if (!isManagerOrAdmin) eventsQuery = eventsQuery.eq('user_id', currentUserId);
+    if (!isManagerOrAdmin) {
+      eventsQuery = eventsQuery.eq('user_id', currentUserId);
+    }
 
-    let tasksQuery = supabase
+    // All tasks visible to all staff
+    const tasksQuery = supabase
       .from('tasks')
       .select('id, title, task_date, status, priority, customer:customers(company_name)')
       .gte('task_date', startStr)
@@ -102,11 +100,21 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
       .not('status', 'eq', 'cancelled')
       .order('task_date');
 
-    if (!isManagerOrAdmin) tasksQuery = tasksQuery.eq('created_by', currentUserId);
+    // Approved holidays — visible to all staff
+    const holidaysQuery = supabase
+      .from('holidays')
+      .select('id, user_id, start_date, end_date')
+      .eq('status', 'approved')
+      .gte('end_date', startStr)
+      .lte('start_date', endStr);
 
-    const [{ data: eventsData }, { data: tasksData }] = await Promise.all([eventsQuery, tasksQuery]);
+    const [{ data: eventsData }, { data: tasksData }, { data: holidaysData }] = await Promise.all([
+      eventsQuery, tasksQuery, holidaysQuery,
+    ]);
+
     setEvents((eventsData as CalendarEvent[]) ?? []);
     setTasks(tasksData ?? []);
+    setHolidays(holidaysData ?? []);
     setLoading(false);
   }, [view, current, currentUserId, isManagerOrAdmin]);
 
@@ -124,11 +132,6 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
     });
   }, [modalOpen]);
 
-  function openDayDetail(dateStr: string) {
-    setDayDetailDate(dateStr);
-    setDayDetailOpen(true);
-  }
-
   function openModal(dateStr: string) {
     setModalDate(dateStr);
     setEndDate(dateStr);
@@ -142,20 +145,25 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
     setCustomerId('');
     setLocationId('');
     setModalError('');
-    setDayDetailOpen(false);
     setModalOpen(true);
   }
 
   async function handleSave() {
     setModalError('');
-    if (eventType === 'task') { setModalOpen(false); router.push(`/tasks/new?date=${modalDate}`); return; }
-    if (eventType === 'holiday') { setModalOpen(false); router.push(`/holidays/new?start=${modalDate}&end=${endDate || modalDate}`); return; }
-
+    if (eventType === 'task') {
+      setModalOpen(false);
+      router.push(`/tasks/new?date=${modalDate}`);
+      return;
+    }
+    if (eventType === 'holiday') {
+      setModalOpen(false);
+      router.push(`/holidays/new?start=${modalDate}&end=${endDate || modalDate}`);
+      return;
+    }
     setSaving(true);
     const supabase = createClient();
     const startDatetime = allDay ? `${modalDate}T00:00:00` : `${modalDate}T${startTime}:00`;
     const endDatetime = allDay ? `${endDate || modalDate}T23:59:59` : `${modalDate}T${endTime}:00`;
-
     const { error } = await supabase.from('calendar_events').insert({
       user_id: targetUserId,
       event_type: eventType as any,
@@ -168,7 +176,6 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
       notes: notes || null,
       created_by: currentUserId,
     });
-
     setSaving(false);
     if (error) { setModalError(error.message); return; }
     setModalOpen(false);
@@ -184,7 +191,8 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
 
   const bankHolidayMap = new Map(bankHolidays.map(bh => [bh.date, bh.name]));
 
-  function getEventsForDay(dateStr: string) {
+  function getEventsForDay(date: Date) {
+    const dateStr = format(date, 'yyyy-MM-dd');
     return events.filter(e => {
       const start = e.start_datetime.split('T')[0];
       const end = e.end_datetime.split('T')[0];
@@ -192,8 +200,18 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
     });
   }
 
-  function getTasksForDay(dateStr: string) {
+  function getTasksForDay(date: Date) {
+    const dateStr = format(date, 'yyyy-MM-dd');
     return tasks.filter(t => t.task_date === dateStr);
+  }
+
+  function getHolidaysForDay(date: Date) {
+    const dateStr = format(date, 'yyyy-MM-dd');
+    return holidays.filter(h => dateStr >= h.start_date && dateStr <= h.end_date);
+  }
+
+  function getStaffName(userId: string) {
+    return allStaff?.find(s => s.id === userId)?.full_name ?? 'Staff';
   }
 
   function EventChip({ event }: { event: CalendarEvent }) {
@@ -207,6 +225,15 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
     );
   }
 
+  function HolidayChip({ holiday }: { holiday: any }) {
+    const firstName = getStaffName(holiday.user_id).split(' ')[0];
+    return (
+      <div className="text-xs px-1.5 py-0.5 rounded border truncate bg-green-100 text-green-800 border-green-200">
+        {firstName}: Leave
+      </div>
+    );
+  }
+
   function TaskChip({ task }: { task: any }) {
     const isDone = task.status === 'completed';
     return (
@@ -214,135 +241,12 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
         onClick={(e) => { e.stopPropagation(); router.push(`/tasks/${task.id}`); }}
         className={cn(
           'text-xs px-1.5 py-0.5 rounded border truncate cursor-pointer hover:opacity-80',
-          isDone ? 'bg-green-100 text-green-800 border-green-200 line-through' : 'bg-aas-blue text-white border-aas-blue'
+          isDone
+            ? 'bg-green-100 text-green-800 border-green-200 line-through'
+            : 'bg-aas-blue text-white border-aas-blue'
         )}
       >
         ✓ {task.title}
-      </div>
-    );
-  }
-
-  // ── Day Detail Panel ────────────────────────────────────────
-  function DayDetailPanel() {
-    const dayEvents = getEventsForDay(dayDetailDate);
-    const dayTasks = getTasksForDay(dayDetailDate);
-    const bh = bankHolidayMap.get(dayDetailDate);
-    const offEvents = dayEvents.filter(e => OFF_TYPES.includes(e.event_type));
-    const workEvents = dayEvents.filter(e => !OFF_TYPES.includes(e.event_type));
-
-    const parsedDate = parseISO(dayDetailDate);
-    const dateLabel = format(parsedDate, 'EEEE, d MMMM yyyy');
-
-    return (
-      <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
-        <div className="absolute inset-0 bg-black/40" onClick={() => setDayDetailOpen(false)} />
-        <div className="relative w-full sm:max-w-md bg-white rounded-t-2xl sm:rounded-2xl shadow-xl flex flex-col max-h-[85vh]">
-          {/* Header */}
-          <div className="flex items-center justify-between px-4 pt-4 pb-3 border-b border-gray-100 shrink-0">
-            <div>
-              <h3 className="text-base font-bold text-gray-800">{dateLabel}</h3>
-              {bh && <p className="text-xs text-purple-600 font-medium">{bh}</p>}
-            </div>
-            <button onClick={() => setDayDetailOpen(false)} className="p-1 rounded-lg hover:bg-gray-100">
-              <X size={18} />
-            </button>
-          </div>
-
-          {/* Scrollable content */}
-          <div className="overflow-y-auto flex-1 p-4 space-y-4">
-
-            {/* Tasks */}
-            {dayTasks.length > 0 && (
-              <div>
-                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Tasks</p>
-                <div className="space-y-2">
-                  {dayTasks.map(task => {
-                    const isDone = task.status === 'completed';
-                    const customer = task.customer as { company_name: string } | undefined;
-                    return (
-                      <button
-                        key={task.id}
-                        onClick={() => router.push(`/tasks/${task.id}`)}
-                        className={cn(
-                          'w-full text-left rounded-xl border p-3 cursor-pointer hover:opacity-90 transition-opacity',
-                          isDone ? 'bg-green-50 border-green-100' : 'bg-aas-blue/5 border-aas-blue/20'
-                        )}
-                      >
-                        <div className="flex items-center gap-2">
-                          <CheckSquare size={14} className={isDone ? 'text-green-600' : 'text-aas-blue'} />
-                          <p className={cn('text-sm font-medium', isDone ? 'text-green-800 line-through' : 'text-gray-800')}>
-                            {task.title}
-                          </p>
-                        </div>
-                        {customer && <p className="text-xs text-gray-400 mt-0.5 ml-5">{customer.company_name}</p>}
-                        <p className="text-xs text-gray-400 mt-0.5 ml-5 capitalize">{task.status.replace('_', ' ')}</p>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-
-            {/* Off / Absent */}
-            {offEvents.length > 0 && (
-              <div>
-                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Off / Absent</p>
-                <div className="space-y-2">
-                  {offEvents.map(ev => {
-                    const user = ev.user as Pick<Profile, 'full_name'> | undefined;
-                    const colour = CALENDAR_EVENT_COLOURS[ev.event_type];
-                    return (
-                      <div key={ev.id} className={cn('rounded-xl border p-3', colour)}>
-                        {isManagerOrAdmin && user && <p className="text-xs font-semibold mb-0.5">{user.full_name}</p>}
-                        <p className="text-sm font-medium">{CALENDAR_EVENT_LABELS[ev.event_type]}</p>
-                        {ev.notes && <p className="text-xs opacity-75 mt-0.5">{ev.notes}</p>}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-
-            {/* In / Working */}
-            {workEvents.length > 0 && (
-              <div>
-                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Scheduled</p>
-                <div className="space-y-2">
-                  {workEvents.map(ev => {
-                    const user = ev.user as Pick<Profile, 'full_name'> | undefined;
-                    const customer = ev.customer as { company_name: string } | undefined;
-                    const location = ev.location as { name: string } | undefined;
-                    const colour = CALENDAR_EVENT_COLOURS[ev.event_type];
-                    return (
-                      <div key={ev.id} className={cn('rounded-xl border p-3', colour)}>
-                        {isManagerOrAdmin && user && <p className="text-xs font-semibold mb-0.5">{user.full_name}</p>}
-                        <p className="text-sm font-medium">{ev.title ?? CALENDAR_EVENT_LABELS[ev.event_type]}</p>
-                        {customer && <p className="text-xs opacity-75">{customer.company_name}</p>}
-                        {location && <p className="text-xs opacity-75">{location.name}</p>}
-                        {ev.notes && <p className="text-xs opacity-75 mt-0.5">{ev.notes}</p>}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-
-            {dayTasks.length === 0 && dayEvents.length === 0 && (
-              <p className="text-center text-sm text-gray-400 py-6">Nothing scheduled for this day</p>
-            )}
-          </div>
-
-          {/* Footer */}
-          <div className="p-4 border-t border-gray-100 shrink-0">
-            <button
-              onClick={() => openModal(dayDetailDate)}
-              className="w-full flex items-center justify-center gap-2 py-2.5 bg-aas-blue text-white rounded-xl text-sm font-medium hover:bg-aas-blue-dark"
-            >
-              <Plus size={16} />
-              Add event or task
-            </button>
-          </div>
-        </div>
       </div>
     );
   }
@@ -366,15 +270,16 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
         <div className="flex-1 grid grid-cols-7 grid-rows-6 overflow-hidden">
           {days.map(day => {
             const dayStr = format(day, 'yyyy-MM-dd');
-            const dayEvents = getEventsForDay(dayStr);
-            const dayTasks = getTasksForDay(dayStr);
+            const dayEvents = getEventsForDay(day);
+            const dayTasks = getTasksForDay(day);
+            const dayHolidays = getHolidaysForDay(day);
             const bh = bankHolidayMap.get(dayStr);
             const inMonth = isSameMonth(day, current);
-            const totalItems = dayEvents.length + dayTasks.length;
+            const totalItems = dayEvents.length + dayTasks.length + dayHolidays.length;
             return (
               <div
                 key={dayStr}
-                onClick={() => openDayDetail(dayStr)}
+                onClick={() => openModal(dayStr)}
                 className={cn(
                   'border-b border-r border-gray-50 p-1 min-h-0 flex flex-col overflow-hidden cursor-pointer hover:bg-gray-50 transition-colors',
                   !inMonth && 'bg-gray-50/50',
@@ -387,11 +292,16 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
                 )}>
                   {format(day, 'd')}
                 </div>
-                {bh && <div className="text-[10px] text-purple-600 font-medium truncate mb-0.5">{bh}</div>}
+                {bh && (
+                  <div className="text-[10px] text-purple-600 font-medium truncate mb-0.5">{bh}</div>
+                )}
                 <div className="flex-1 overflow-hidden space-y-0.5">
-                  {dayTasks.slice(0, 2).map(t => <TaskChip key={t.id} task={t} />)}
-                  {dayEvents.slice(0, Math.max(0, 3 - dayTasks.length)).map(ev => <EventChip key={ev.id} event={ev} />)}
-                  {totalItems > 3 && <div className="text-[10px] text-gray-400">+{totalItems - 3} more</div>}
+                  {dayHolidays.slice(0, 1).map(h => <HolidayChip key={h.id} holiday={h} />)}
+                  {dayTasks.slice(0, 1).map(t => <TaskChip key={t.id} task={t} />)}
+                  {dayEvents.slice(0, Math.max(0, 2 - dayTasks.length)).map(ev => <EventChip key={ev.id} event={ev} />)}
+                  {totalItems > 3 && (
+                    <div className="text-[10px] text-gray-400">+{totalItems - 3} more</div>
+                  )}
                 </div>
               </div>
             );
@@ -410,24 +320,34 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
       <div className="flex-1 overflow-auto">
         <div className="grid grid-cols-7 min-w-[600px]">
           {days.map(day => {
-            const dayStr = format(day, 'yyyy-MM-dd');
-            const bh = bankHolidayMap.get(dayStr);
+            const bh = bankHolidayMap.get(format(day, 'yyyy-MM-dd'));
             return (
-              <div key={dayStr} className={cn('p-2 border-b border-r border-gray-100 text-center cursor-pointer hover:bg-gray-50', isToday(day) && 'bg-aas-blue-50')}
-                onClick={() => openDayDetail(dayStr)}>
+              <div key={day.toISOString()} className={cn(
+                'p-2 border-b border-r border-gray-100 text-center cursor-pointer hover:bg-gray-50',
+                isToday(day) && 'bg-aas-blue-50'
+              )}
+                onClick={() => openModal(format(day, 'yyyy-MM-dd'))}
+              >
                 <p className="text-xs text-gray-400">{format(day, 'EEE')}</p>
-                <p className={cn('text-sm font-semibold', isToday(day) ? 'text-aas-blue' : 'text-gray-700')}>{format(day, 'd')}</p>
+                <p className={cn('text-sm font-semibold', isToday(day) ? 'text-aas-blue' : 'text-gray-700')}>
+                  {format(day, 'd')}
+                </p>
                 {bh && <p className="text-[10px] text-purple-600 truncate">{bh}</p>}
               </div>
             );
           })}
           {days.map(day => {
-            const dayStr = format(day, 'yyyy-MM-dd');
-            const dayEvents = getEventsForDay(dayStr);
-            const dayTasks = getTasksForDay(dayStr);
+            const dayEvents = getEventsForDay(day);
+            const dayTasks = getTasksForDay(day);
+            const dayHolidays = getHolidaysForDay(day);
             return (
-              <div key={dayStr} className={cn('p-1.5 border-r border-b border-gray-50 min-h-32 space-y-1 cursor-pointer hover:bg-gray-50/70', isToday(day) && 'bg-aas-blue-50/50')}
-                onClick={() => openDayDetail(dayStr)}>
+              <div key={day.toISOString()} className={cn(
+                'p-1.5 border-r border-b border-gray-50 min-h-32 space-y-1 cursor-pointer hover:bg-gray-50/70',
+                isToday(day) && 'bg-aas-blue-50/50'
+              )}
+                onClick={() => openModal(format(day, 'yyyy-MM-dd'))}
+              >
+                {dayHolidays.map(h => <HolidayChip key={h.id} holiday={h} />)}
                 {dayTasks.map(t => <TaskChip key={t.id} task={t} />)}
                 {dayEvents.map(ev => <EventChip key={ev.id} event={ev} />)}
               </div>
@@ -452,7 +372,11 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
             {days.map(day => {
               const bh = bankHolidayMap.get(format(day, 'yyyy-MM-dd'));
               return (
-                <div key={day.toISOString()} className={cn('flex-1 min-w-[28px] text-center py-1 border-r border-gray-50 text-[10px]', isToday(day) && 'bg-aas-blue text-white', bh && !isToday(day) && 'bg-purple-50')}>
+                <div key={day.toISOString()} className={cn(
+                  'flex-1 min-w-[28px] text-center py-1 border-r border-gray-50 text-[10px]',
+                  isToday(day) && 'bg-aas-blue text-white',
+                  bh && !isToday(day) && 'bg-purple-50'
+                )}>
                   <div>{format(day, 'EEE')[0]}</div>
                   <div className="font-semibold">{format(day, 'd')}</div>
                 </div>
@@ -467,6 +391,7 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
               {days.map(day => {
                 const dayStr = format(day, 'yyyy-MM-dd');
                 const bh = bankHolidayMap.get(dayStr);
+                const onHoliday = holidays.some(h => h.user_id === s.id && dayStr >= h.start_date && dayStr <= h.end_date);
                 const dayEvents = events.filter(e => {
                   if (e.user_id !== s.id) return false;
                   const start = e.start_datetime.split('T')[0];
@@ -474,9 +399,16 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
                   return dayStr >= start && dayStr <= end;
                 });
                 const ev = dayEvents[0];
-                const colour = ev ? CALENDAR_EVENT_COLOURS[ev.event_type] : bh ? 'bg-purple-100' : '';
+                const colour = onHoliday
+                  ? 'bg-green-200'
+                  : ev ? CALENDAR_EVENT_COLOURS[ev.event_type]
+                  : bh ? 'bg-purple-100' : '';
                 return (
-                  <div key={dayStr} title={ev ? (ev.title ?? CALENDAR_EVENT_LABELS[ev.event_type]) : bh ?? ''} className={cn('flex-1 min-w-[28px] border-r border-gray-50 py-2', colour)} />
+                  <div
+                    key={dayStr}
+                    title={onHoliday ? 'Annual Leave' : ev ? (ev.title ?? CALENDAR_EVENT_LABELS[ev.event_type]) : bh ?? ''}
+                    className={cn('flex-1 min-w-[28px] border-r border-gray-50 py-2', colour)}
+                  />
                 );
               })}
             </div>
@@ -489,31 +421,67 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
   // ── Day view ───────────────────────────────────────────────
   function DayView() {
     const dayStr = format(current, 'yyyy-MM-dd');
-    const dayEvents = getEventsForDay(dayStr);
-    const dayTasks = getTasksForDay(dayStr);
+    const dayEvents = getEventsForDay(current);
+    const dayTasks = getTasksForDay(current);
+    const dayHolidays = getHolidaysForDay(current);
     const bh = bankHolidayMap.get(dayStr);
-    const hasItems = dayEvents.length > 0 || dayTasks.length > 0;
+    const hasItems = dayEvents.length > 0 || dayTasks.length > 0 || dayHolidays.length > 0;
 
     return (
       <div className="flex-1 overflow-auto p-4 space-y-3">
-        {bh && <div className="rounded-lg bg-purple-50 border border-purple-100 px-4 py-2 text-sm text-purple-700 font-medium">Bank Holiday: {bh}</div>}
+        {bh && (
+          <div className="rounded-lg bg-purple-50 border border-purple-100 px-4 py-2 text-sm text-purple-700 font-medium">
+            Bank Holiday: {bh}
+          </div>
+        )}
 
+        {/* Who's on leave */}
+        {dayHolidays.length > 0 && (
+          <div className="rounded-xl border border-green-100 bg-green-50 p-3">
+            <p className="text-xs font-semibold text-green-700 mb-1.5">On leave today</p>
+            <div className="flex flex-wrap gap-1.5">
+              {dayHolidays.map(h => (
+                <span key={h.id} className="text-xs bg-green-100 text-green-800 border border-green-200 px-2 py-0.5 rounded-full font-medium">
+                  {getStaffName(h.user_id)}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Tasks */}
         {dayTasks.map(task => {
           const isDone = task.status === 'completed';
           const customer = task.customer as { company_name: string } | undefined;
           return (
-            <div key={task.id} onClick={() => router.push(`/tasks/${task.id}`)} className={cn('rounded-xl border p-4 cursor-pointer hover:opacity-90', isDone ? 'bg-green-50 border-green-100' : 'bg-aas-blue border-aas-blue')}>
+            <div
+              key={task.id}
+              onClick={() => router.push(`/tasks/${task.id}`)}
+              className={cn(
+                'rounded-xl border p-4 cursor-pointer hover:opacity-90 transition-opacity',
+                isDone ? 'bg-green-50 border-green-100' : 'bg-aas-blue border-aas-blue'
+              )}
+            >
               <div className="flex items-start justify-between gap-2">
                 <div>
-                  <p className={cn('font-medium text-sm', isDone ? 'text-green-800 line-through' : 'text-white')}>✓ {task.title}</p>
-                  {customer && <p className={cn('text-xs mt-0.5', isDone ? 'text-green-600' : 'text-white/80')}>{customer.company_name}</p>}
+                  <p className={cn('font-medium text-sm', isDone ? 'text-green-800 line-through' : 'text-white')}>
+                    ✓ {task.title}
+                  </p>
+                  {customer && (
+                    <p className={cn('text-xs mt-0.5', isDone ? 'text-green-600' : 'text-white/80')}>
+                      {customer.company_name}
+                    </p>
+                  )}
                 </div>
-                <span className={cn('text-xs shrink-0 px-2 py-0.5 rounded-full font-medium', isDone ? 'bg-green-200 text-green-800' : 'bg-white/20 text-white')}>{isDone ? 'Done' : 'Task'}</span>
+                <span className={cn('text-xs shrink-0 px-2 py-0.5 rounded-full font-medium', isDone ? 'bg-green-200 text-green-800' : 'bg-white/20 text-white')}>
+                  {isDone ? 'Done' : 'Task'}
+                </span>
               </div>
             </div>
           );
         })}
 
+        {/* Calendar events */}
         {dayEvents.map(ev => {
           const colour = CALENDAR_EVENT_COLOURS[ev.event_type];
           const user = ev.user as Pick<Profile, 'full_name'> | undefined;
@@ -523,22 +491,36 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
             <div key={ev.id} className={cn('rounded-xl border p-4', colour)}>
               <div className="flex items-start justify-between gap-2">
                 <div>
-                  {isManagerOrAdmin && user && <p className="text-xs font-semibold mb-1">{user.full_name}</p>}
+                  {isManagerOrAdmin && user && (
+                    <p className="text-xs font-semibold mb-1">{user.full_name}</p>
+                  )}
                   <p className="font-medium text-sm">{ev.title ?? CALENDAR_EVENT_LABELS[ev.event_type]}</p>
                   {customer && <p className="text-xs mt-0.5">{customer.company_name}</p>}
                   {location && <p className="text-xs">{location.name}</p>}
                   {ev.notes && <p className="text-xs mt-1 opacity-75">{ev.notes}</p>}
                 </div>
-                <span className="text-xs opacity-60 shrink-0">{ev.all_day ? 'All day' : format(parseISO(ev.start_datetime), 'HH:mm')}</span>
+                <span className="text-xs opacity-60 shrink-0">
+                  {ev.all_day ? 'All day' : format(parseISO(ev.start_datetime), 'HH:mm')}
+                </span>
               </div>
             </div>
           );
         })}
 
         {!hasItems ? (
-          <div onClick={() => openModal(dayStr)} className="text-center py-12 text-sm text-gray-400 cursor-pointer hover:text-aas-blue border-2 border-dashed border-gray-200 rounded-xl hover:border-aas-blue transition-colors">+ Tap to add event</div>
+          <div
+            onClick={() => openModal(dayStr)}
+            className="text-center py-12 text-sm text-gray-400 cursor-pointer hover:text-aas-blue border-2 border-dashed border-gray-200 rounded-xl hover:border-aas-blue transition-colors"
+          >
+            + Tap to add event
+          </div>
         ) : (
-          <button onClick={() => openModal(dayStr)} className="w-full py-2.5 border-2 border-dashed border-gray-200 rounded-xl text-sm text-gray-400 hover:border-aas-blue hover:text-aas-blue transition-colors">+ Add another event</button>
+          <button
+            onClick={() => openModal(dayStr)}
+            className="w-full py-2.5 border-2 border-dashed border-gray-200 rounded-xl text-sm text-gray-400 hover:border-aas-blue hover:text-aas-blue transition-colors"
+          >
+            + Add another event
+          </button>
         )}
       </div>
     );
@@ -556,16 +538,27 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
         <div className="relative w-full sm:max-w-md bg-white rounded-t-2xl sm:rounded-2xl shadow-xl flex flex-col max-h-[90vh]">
           <div className="flex items-center justify-between px-4 pt-4 pb-3 border-b border-gray-100 shrink-0">
             <h3 className="text-base font-bold text-gray-800">Add event</h3>
-            <button onClick={() => setModalOpen(false)} className="p-1 rounded-lg hover:bg-gray-100"><X size={18} /></button>
+            <button onClick={() => setModalOpen(false)} className="p-1 rounded-lg hover:bg-gray-100">
+              <X size={18} />
+            </button>
           </div>
           <div className="overflow-y-auto flex-1 p-4 space-y-4">
-            {modalError && <div className="p-3 rounded-lg bg-red-50 text-sm text-red-700">{modalError}</div>}
+            {modalError && (
+              <div className="p-3 rounded-lg bg-red-50 text-sm text-red-700">{modalError}</div>
+            )}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Type</label>
               <div className="flex flex-wrap gap-1.5">
                 {MODAL_EVENT_TYPES.map(t => (
-                  <button key={t.value} type="button" onClick={() => setEventType(t.value)}
-                    className={cn('px-3 py-1 rounded-full text-xs font-medium border transition-colors', eventType === t.value ? t.pill : 'bg-white text-gray-500 border-gray-200 hover:border-gray-400')}>
+                  <button
+                    key={t.value}
+                    type="button"
+                    onClick={() => setEventType(t.value)}
+                    className={cn(
+                      'px-3 py-1 rounded-full text-xs font-medium border transition-colors',
+                      eventType === t.value ? t.pill : 'bg-white text-gray-500 border-gray-200 hover:border-gray-400'
+                    )}
+                  >
                     {t.label}
                   </button>
                 ))}
@@ -575,19 +568,30 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">For</label>
                 <select value={targetUserId} onChange={e => setTargetUserId(e.target.value)} className={inputClass}>
-                  {allStaff.map(s => <option key={s.id} value={s.id}>{s.full_name}{s.id === currentUserId ? ' (me)' : ''}</option>)}
+                  {allStaff.map(s => (
+                    <option key={s.id} value={s.id}>{s.full_name}{s.id === currentUserId ? ' (me)' : ''}</option>
+                  ))}
                 </select>
               </div>
             )}
             {!['holiday', 'sickness', 'office', 'home_working', 'travel'].includes(eventType) && (
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Title {isTaskOrHoliday ? '*' : '(optional)'}</label>
-                <input value={title} onChange={e => setTitle(e.target.value)} placeholder={eventType === 'task' ? 'What needs doing?' : 'Add a title…'} className={inputClass} />
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Title {isTaskOrHoliday ? '*' : '(optional)'}
+                </label>
+                <input
+                  value={title}
+                  onChange={e => setTitle(e.target.value)}
+                  placeholder={eventType === 'task' ? 'What needs doing?' : 'Add a title…'}
+                  className={inputClass}
+                />
               </div>
             )}
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">{['holiday', 'sickness'].includes(eventType) ? 'From' : 'Date'}</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  {['holiday', 'sickness'].includes(eventType) ? 'From' : 'Date'}
+                </label>
                 <input type="date" value={modalDate} onChange={e => { setModalDate(e.target.value); if (!endDate || endDate < e.target.value) setEndDate(e.target.value); }} className={inputClass} />
               </div>
               {['holiday', 'sickness'].includes(eventType) && (
@@ -641,11 +645,21 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
                 <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2} className={`${inputClass} resize-none`} />
               </div>
             )}
-            {eventType === 'task' && <div className="rounded-lg bg-aas-blue-pale border border-aas-blue/20 px-3 py-2 text-xs text-aas-blue">You'll be taken to the task form with the date pre-filled.</div>}
-            {eventType === 'holiday' && <div className="rounded-lg bg-green-50 border border-green-100 px-3 py-2 text-xs text-green-700">You'll be taken to the holiday request form with the dates pre-filled.</div>}
+            {eventType === 'task' && (
+              <div className="rounded-lg bg-aas-blue-pale border border-aas-blue/20 px-3 py-2 text-xs text-aas-blue">
+                You'll be taken to the task form with the date pre-filled.
+              </div>
+            )}
+            {eventType === 'holiday' && (
+              <div className="rounded-lg bg-green-50 border border-green-100 px-3 py-2 text-xs text-green-700">
+                You'll be taken to the holiday request form with the dates pre-filled.
+              </div>
+            )}
           </div>
           <div className="flex gap-3 p-4 border-t border-gray-100 shrink-0">
-            <button type="button" onClick={() => setModalOpen(false)} className="flex-1 py-2.5 border border-gray-200 rounded-lg text-sm text-gray-600">Cancel</button>
+            <button type="button" onClick={() => setModalOpen(false)} className="flex-1 py-2.5 border border-gray-200 rounded-lg text-sm text-gray-600">
+              Cancel
+            </button>
             <button type="button" onClick={handleSave} disabled={saving} className="flex-1 py-2.5 bg-aas-blue text-white rounded-lg text-sm font-medium disabled:opacity-60">
               {saving ? 'Saving…' : eventType === 'task' ? 'Go to task form →' : eventType === 'holiday' ? 'Go to holiday form →' : 'Save'}
             </button>
@@ -656,7 +670,10 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
   }
 
   const titleFormats: Record<CalView, string> = {
-    day: 'EEEE d MMMM yyyy', week: "'Week of' d MMM yyyy", month: 'MMMM yyyy', timeline: "'4 weeks from' d MMM",
+    day: 'EEEE d MMMM yyyy',
+    week: "'Week of' d MMM yyyy",
+    month: 'MMMM yyyy',
+    timeline: "'4 weeks from' d MMM",
   };
 
   return (
@@ -664,21 +681,46 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
       <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-100 bg-white shrink-0 flex-wrap gap-y-2">
         <div className="flex rounded-lg border border-gray-200 overflow-hidden text-xs">
           {VIEWS.filter(v => v !== 'timeline' || isManagerOrAdmin).map(v => (
-            <button key={v} onClick={() => setView(v)} className={cn('px-3 py-1.5 font-medium capitalize transition-colors', view === v ? 'bg-aas-blue text-white' : 'text-gray-600 hover:bg-gray-50')}>{v}</button>
+            <button
+              key={v}
+              onClick={() => setView(v)}
+              className={cn(
+                'px-3 py-1.5 font-medium capitalize transition-colors',
+                view === v ? 'bg-aas-blue text-white' : 'text-gray-600 hover:bg-gray-50'
+              )}
+            >
+              {v}
+            </button>
           ))}
         </div>
         <div className="flex items-center gap-1">
-          <button onClick={() => navigate(-1)} className="p-1.5 rounded-lg hover:bg-gray-100"><ChevronLeft size={16} /></button>
-          <button onClick={() => setCurrent(new Date())} className="px-2 py-1 text-xs font-medium text-aas-blue hover:bg-aas-blue-pale rounded">Today</button>
-          <button onClick={() => navigate(1)} className="p-1.5 rounded-lg hover:bg-gray-100"><ChevronRight size={16} /></button>
+          <button onClick={() => navigate(-1)} className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors">
+            <ChevronLeft size={16} />
+          </button>
+          <button onClick={() => setCurrent(new Date())} className="px-2 py-1 text-xs font-medium text-aas-blue hover:bg-aas-blue-pale rounded">
+            Today
+          </button>
+          <button onClick={() => navigate(1)} className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors">
+            <ChevronRight size={16} />
+          </button>
         </div>
-        <span className="text-sm font-semibold text-gray-700 flex-1">{format(current, titleFormats[view])}</span>
-        <button onClick={() => openModal(format(current, 'yyyy-MM-dd'))} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-aas-blue text-white text-xs font-medium hover:bg-aas-blue-dark">
-          <Plus size={14} />Add event
+        <span className="text-sm font-semibold text-gray-700 flex-1">
+          {format(current, titleFormats[view])}
+        </span>
+        <button
+          onClick={() => openModal(format(current, 'yyyy-MM-dd'))}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-aas-blue text-white text-xs font-medium hover:bg-aas-blue-dark transition-colors"
+        >
+          <Plus size={14} />
+          Add event
         </button>
       </div>
 
       <div className="px-4 py-2 border-b border-gray-50 flex gap-3 overflow-x-auto shrink-0">
+        <div className="flex items-center gap-1 shrink-0">
+          <div className="w-2.5 h-2.5 rounded-sm border bg-green-100 border-green-200" />
+          <span className="text-[10px] text-gray-500">Leave</span>
+        </div>
         <div className="flex items-center gap-1 shrink-0">
           <div className="w-2.5 h-2.5 rounded-sm border bg-aas-blue border-aas-blue" />
           <span className="text-[10px] text-gray-500">Task</span>
@@ -704,7 +746,6 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
         </>
       )}
 
-      {dayDetailOpen && <DayDetailPanel />}
       {modalOpen && <AddEventModal />}
     </div>
   );
