@@ -46,6 +46,7 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [tasks, setTasks] = useState<any[]>([]);
   const [holidays, setHolidays] = useState<any[]>([]);
+  const [completedJobs, setCompletedJobs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const isManagerOrAdmin = ['administrator', 'manager'].includes(profile.role);
 
@@ -104,7 +105,7 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
       .not('status', 'eq', 'cancelled')
       .order('task_date');
 
-    // Approved holidays — visible to all staff
+    // Approved holidays — all staff can see
     const holidaysQuery = supabase
       .from('holidays')
       .select('id, user_id, start_date, end_date')
@@ -112,13 +113,25 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
       .gte('end_date', startStr)
       .lte('start_date', endStr);
 
-    const [{ data: eventsData }, { data: tasksData }, { data: holidaysData }] = await Promise.all([
-      eventsQuery, tasksQuery, holidaysQuery,
-    ]);
+    // Completed jobs — all staff can see
+    const completedJobsQuery = supabase
+      .from('job_board')
+      .select('id, title, completed_by, completed_at, completion_notes')
+      .eq('status', 'completed')
+      .gte('completed_at', start.toISOString())
+      .lte('completed_at', end.toISOString() + 'T23:59:59');
+
+    const [
+      { data: eventsData },
+      { data: tasksData },
+      { data: holidaysData },
+      { data: completedJobsData },
+    ] = await Promise.all([eventsQuery, tasksQuery, holidaysQuery, completedJobsQuery]);
 
     setEvents((eventsData as CalendarEvent[]) ?? []);
     setTasks(tasksData ?? []);
     setHolidays(holidaysData ?? []);
+    setCompletedJobs(completedJobsData ?? []);
     setLoading(false);
   }, [view, current, currentUserId, isManagerOrAdmin]);
 
@@ -203,9 +216,9 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
   function getEventsForDay(date: Date) {
     const dateStr = format(date, 'yyyy-MM-dd');
     return events.filter(e => {
-      const start = e.start_datetime.split('T')[0];
-      const end = e.end_datetime.split('T')[0];
-      return dateStr >= start && dateStr <= end;
+      const s = e.start_datetime.split('T')[0];
+      const en = e.end_datetime.split('T')[0];
+      return dateStr >= s && dateStr <= en;
     });
   }
 
@@ -219,9 +232,16 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
     return holidays.filter(h => dateStr >= h.start_date && dateStr <= h.end_date);
   }
 
+  function getCompletedJobsForDay(date: Date) {
+    const dateStr = format(date, 'yyyy-MM-dd');
+    return completedJobs.filter(j => j.completed_at?.split('T')[0] === dateStr);
+  }
+
   function getStaffName(userId: string) {
     return allStaff?.find(s => s.id === userId)?.full_name ?? 'Staff';
   }
+
+  // ── Chips ───────────────────────────────────────────────────
 
   function EventChip({ event }: { event: CalendarEvent }) {
     const colour = CALENDAR_EVENT_COLOURS[event.event_type] ?? 'bg-gray-100 text-gray-700';
@@ -260,15 +280,25 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
     );
   }
 
+  function CompletedJobChip({ job }: { job: any }) {
+    return (
+      <div className="text-xs px-1.5 py-0.5 rounded border truncate bg-orange-100 text-orange-800 border-orange-200">
+        ✓ {job.title}
+      </div>
+    );
+  }
+
   // ── Day Detail Panel ────────────────────────────────────────
+
   function DayDetailPanel() {
     if (!dayPanelDate) return null;
     const day = parseISO(dayPanelDate);
     const dayEvents = getEventsForDay(day);
     const dayTasks = getTasksForDay(day);
     const dayHolidays = getHolidaysForDay(day);
+    const dayCompletedJobs = getCompletedJobsForDay(day);
     const bh = bankHolidayMap.get(dayPanelDate);
-    const isEmpty = dayEvents.length === 0 && dayTasks.length === 0 && dayHolidays.length === 0 && !bh;
+    const isEmpty = dayEvents.length === 0 && dayTasks.length === 0 && dayHolidays.length === 0 && dayCompletedJobs.length === 0 && !bh;
 
     return (
       <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
@@ -346,6 +376,21 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
               );
             })}
 
+            {dayCompletedJobs.length > 0 && (
+              <div className="rounded-xl border border-orange-100 bg-orange-50 p-3">
+                <p className="text-xs font-semibold text-orange-700 mb-1.5">Jobs completed</p>
+                {dayCompletedJobs.map(j => (
+                  <div key={j.id} className="text-sm text-orange-800 py-0.5">
+                    ✓ {j.title}
+                    <span className="text-xs text-orange-600 ml-1">— {getStaffName(j.completed_by)}</span>
+                    {j.completion_notes && (
+                      <p className="text-xs text-orange-600 italic mt-0.5">"{j.completion_notes}"</p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+
             {isEmpty && (
               <p className="text-sm text-gray-400 text-center py-8">Nothing scheduled for this day</p>
             )}
@@ -365,6 +410,7 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
   }
 
   // ── Month view ──────────────────────────────────────────────
+
   function MonthView() {
     const monthStart = startOfMonth(current);
     const monthEnd = endOfMonth(current);
@@ -386,9 +432,10 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
             const dayEvents = getEventsForDay(day);
             const dayTasks = getTasksForDay(day);
             const dayHolidays = getHolidaysForDay(day);
+            const dayCompletedJobs = getCompletedJobsForDay(day);
             const bh = bankHolidayMap.get(dayStr);
             const inMonth = isSameMonth(day, current);
-            const totalItems = dayEvents.length + dayTasks.length + dayHolidays.length;
+            const totalItems = dayEvents.length + dayTasks.length + dayHolidays.length + dayCompletedJobs.length;
             return (
               <div
                 key={dayStr}
@@ -405,16 +452,13 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
                 )}>
                   {format(day, 'd')}
                 </div>
-                {bh && (
-                  <div className="text-[10px] text-purple-600 font-medium truncate mb-0.5">{bh}</div>
-                )}
+                {bh && <div className="text-[10px] text-purple-600 font-medium truncate mb-0.5">{bh}</div>}
                 <div className="flex-1 overflow-hidden space-y-0.5">
                   {dayHolidays.slice(0, 1).map(h => <HolidayChip key={h.id} holiday={h} />)}
                   {dayTasks.slice(0, 1).map(t => <TaskChip key={t.id} task={t} />)}
+                  {dayCompletedJobs.slice(0, 1).map(j => <CompletedJobChip key={j.id} job={j} />)}
                   {dayEvents.slice(0, Math.max(0, 2 - dayTasks.length)).map(ev => <EventChip key={ev.id} event={ev} />)}
-                  {totalItems > 3 && (
-                    <div className="text-[10px] text-gray-400">+{totalItems - 3} more</div>
-                  )}
+                  {totalItems > 3 && <div className="text-[10px] text-gray-400">+{totalItems - 3} more</div>}
                 </div>
               </div>
             );
@@ -425,6 +469,7 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
   }
 
   // ── Week view ──────────────────────────────────────────────
+
   function WeekView() {
     const weekStart = startOfWeek(current, { weekStartsOn: 1 });
     const days = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
@@ -453,6 +498,7 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
             const dayEvents = getEventsForDay(day);
             const dayTasks = getTasksForDay(day);
             const dayHolidays = getHolidaysForDay(day);
+            const dayCompletedJobs = getCompletedJobsForDay(day);
             return (
               <div key={day.toISOString()} className={cn(
                 'p-1.5 border-r border-b border-gray-50 min-h-32 space-y-1 cursor-pointer hover:bg-gray-50/70',
@@ -462,6 +508,7 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
               >
                 {dayHolidays.map(h => <HolidayChip key={h.id} holiday={h} />)}
                 {dayTasks.map(t => <TaskChip key={t.id} task={t} />)}
+                {dayCompletedJobs.map(j => <CompletedJobChip key={j.id} job={j} />)}
                 {dayEvents.map(ev => <EventChip key={ev.id} event={ev} />)}
               </div>
             );
@@ -472,6 +519,7 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
   }
 
   // ── Timeline view ───────────────────────────────────────────
+
   function TimelineView() {
     const staff = allStaff ?? [];
     const timelineStart = startOfWeek(current, { weekStartsOn: 1 });
@@ -507,9 +555,9 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
                 const onHoliday = holidays.some(h => h.user_id === s.id && dayStr >= h.start_date && dayStr <= h.end_date);
                 const dayEvents = events.filter(e => {
                   if (e.user_id !== s.id) return false;
-                  const start = e.start_datetime.split('T')[0];
-                  const end = e.end_datetime.split('T')[0];
-                  return dayStr >= start && dayStr <= end;
+                  const es = e.start_datetime.split('T')[0];
+                  const ee = e.end_datetime.split('T')[0];
+                  return dayStr >= es && dayStr <= ee;
                 });
                 const ev = dayEvents[0];
                 const colour = onHoliday
@@ -532,13 +580,15 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
   }
 
   // ── Day view ───────────────────────────────────────────────
+
   function DayView() {
     const dayStr = format(current, 'yyyy-MM-dd');
     const dayEvents = getEventsForDay(current);
     const dayTasks = getTasksForDay(current);
     const dayHolidays = getHolidaysForDay(current);
+    const dayCompletedJobs = getCompletedJobsForDay(current);
     const bh = bankHolidayMap.get(dayStr);
-    const hasItems = dayEvents.length > 0 || dayTasks.length > 0 || dayHolidays.length > 0;
+    const hasItems = dayEvents.length > 0 || dayTasks.length > 0 || dayHolidays.length > 0 || dayCompletedJobs.length > 0;
 
     return (
       <div className="flex-1 overflow-auto p-4 space-y-3">
@@ -547,6 +597,7 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
             Bank Holiday: {bh}
           </div>
         )}
+
         {dayHolidays.length > 0 && (
           <div className="rounded-xl border border-green-100 bg-green-50 p-3">
             <p className="text-xs font-semibold text-green-700 mb-1.5">On leave today</p>
@@ -559,6 +610,7 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
             </div>
           </div>
         )}
+
         {dayTasks.map(task => {
           const isDone = task.status === 'completed';
           const customer = task.customer as { company_name: string } | undefined;
@@ -589,6 +641,7 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
             </div>
           );
         })}
+
         {dayEvents.map(ev => {
           const colour = CALENDAR_EVENT_COLOURS[ev.event_type];
           const user = ev.user as Pick<Profile, 'full_name'> | undefined;
@@ -613,6 +666,19 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
             </div>
           );
         })}
+
+        {dayCompletedJobs.length > 0 && (
+          <div className="rounded-xl border border-orange-100 bg-orange-50 p-3">
+            <p className="text-xs font-semibold text-orange-700 mb-1.5">Jobs completed today</p>
+            {dayCompletedJobs.map(j => (
+              <div key={j.id} className="py-0.5">
+                <p className="text-sm text-orange-800">✓ {j.title} <span className="text-xs text-orange-600">— {getStaffName(j.completed_by)}</span></p>
+                {j.completion_notes && <p className="text-xs text-orange-600 italic">"{j.completion_notes}"</p>}
+              </div>
+            ))}
+          </div>
+        )}
+
         {!hasItems ? (
           <div
             onClick={() => openModal(dayStr)}
@@ -633,6 +699,7 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
   }
 
   // ── Add Event Modal ────────────────────────────────────────
+
   function AddEventModal() {
     const inputClass = 'w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-aas-blue';
     const showCustomerLocation = ['customer_visit', 'farm_work', 'site_work', 'meeting', 'general_work'].includes(eventType);
@@ -649,9 +716,7 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
             </button>
           </div>
           <div className="overflow-y-auto flex-1 p-4 space-y-4">
-            {modalError && (
-              <div className="p-3 rounded-lg bg-red-50 text-sm text-red-700">{modalError}</div>
-            )}
+            {modalError && <div className="p-3 rounded-lg bg-red-50 text-sm text-red-700">{modalError}</div>}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Type</label>
               <div className="flex flex-wrap gap-1.5">
@@ -784,6 +849,7 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
 
   return (
     <div className="flex flex-col h-full">
+      {/* Toolbar */}
       <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-100 bg-white shrink-0 flex-wrap gap-y-2">
         <div className="flex rounded-lg border border-gray-200 overflow-hidden text-xs">
           {VIEWS.filter(v => v !== 'timeline' || isManagerOrAdmin).map(v => (
@@ -822,6 +888,7 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
         </button>
       </div>
 
+      {/* Legend */}
       <div className="px-4 py-2 border-b border-gray-50 flex gap-3 overflow-x-auto shrink-0">
         <div className="flex items-center gap-1 shrink-0">
           <div className="w-2.5 h-2.5 rounded-sm border bg-green-100 border-green-200" />
@@ -831,6 +898,10 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
           <div className="w-2.5 h-2.5 rounded-sm border bg-aas-blue border-aas-blue" />
           <span className="text-[10px] text-gray-500">Task</span>
         </div>
+        <div className="flex items-center gap-1 shrink-0">
+          <div className="w-2.5 h-2.5 rounded-sm border bg-orange-100 border-orange-200" />
+          <span className="text-[10px] text-gray-500">Job done</span>
+        </div>
         {Object.entries(CALENDAR_EVENT_LABELS).map(([key, label]) => (
           <div key={key} className="flex items-center gap-1 shrink-0">
             <div className={cn('w-2.5 h-2.5 rounded-sm border', CALENDAR_EVENT_COLOURS[key])} />
@@ -839,6 +910,7 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
         ))}
       </div>
 
+      {/* Content */}
       {loading ? (
         <div className="flex-1 flex items-center justify-center">
           <div className="w-6 h-6 border-2 border-aas-blue border-t-transparent rounded-full animate-spin" />
