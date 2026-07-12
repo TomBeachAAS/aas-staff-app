@@ -4,7 +4,7 @@ import Link from 'next/link';
 import {
   Users, Building2, MapPin, Truck, Clock, Receipt,
   Navigation, BarChart3, Settings, Bell, LogOut, Stethoscope,
-  ClipboardList
+  Umbrella
 } from 'lucide-react';
 import { logout } from '@/lib/auth-actions';
 
@@ -22,7 +22,7 @@ export default async function MorePage() {
     {
       title: 'General',
       items: [
-        { href: '/jobs', icon: ClipboardList, label: 'Job Board' },
+        { href: '/holidays', icon: Umbrella, label: 'Holiday' },
         { href: '/sickness', icon: Stethoscope, label: 'Sickness' },
         { href: '/notifications', icon: Bell, label: 'Notifications' },
       ],
