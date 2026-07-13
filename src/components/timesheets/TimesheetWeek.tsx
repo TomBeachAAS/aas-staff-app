@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { format, parseISO } from 'date-fns';
-import { ChevronLeft, ChevronRight, Lock } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Lock, Check } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import type { TimesheetEntry, WorkingPattern } from '@/types/database';
 
@@ -23,6 +23,7 @@ interface Props {
 
 export function TimesheetWeek({ periodId, userId, currentUserId, days, entries, workingPattern, weekStartStr, prevWeek, nextWeek, isLocked, canEdit }: Props) {
   const router = useRouter();
+
   const [localEntries, setLocalEntries] = useState<Record<string, { start_time: string; end_time: string; notes: string }>>(() => {
     const map: Record<string, { start_time: string; end_time: string; notes: string }> = {};
     entries.forEach(e => {
@@ -34,7 +35,20 @@ export function TimesheetWeek({ periodId, userId, currentUserId, days, entries, 
     });
     return map;
   });
+
+  // Track which days are auto-populated but not yet manually confirmed
+  const [autoDays, setAutoDays] = useState<Set<string>>(() => {
+    const set = new Set<string>();
+    entries.forEach(e => {
+      if ((e as any).is_auto_populated) set.add(e.work_date);
+    });
+    return set;
+  });
+
+  // Track which days have been edited since load
+  const [dirtyDays, setDirtyDays] = useState<Set<string>>(new Set());
   const [saving, setSaving] = useState<string | null>(null);
+  const [saved, setSaved] = useState<Set<string>>(new Set());
 
   const dayKeys: Record<number, keyof WorkingPattern> = { 1: 'mon', 2: 'tue', 3: 'wed', 4: 'thu', 5: 'fri', 6: 'sat', 0: 'sun' };
 
@@ -63,7 +77,23 @@ export function TimesheetWeek({ periodId, userId, currentUserId, days, entries, 
         if (mins > 0) total += mins;
       }
     });
+    if (total === 0) return '0h';
     return `${Math.floor(total / 60)}h${total % 60 ? ` ${total % 60}m` : ''}`;
+  }
+
+  function updateEntry(dateStr: string, field: 'start_time' | 'end_time' | 'notes', value: string) {
+    setLocalEntries(prev => ({
+      ...prev,
+      [dateStr]: {
+        start_time: prev[dateStr]?.start_time ?? '08:00',
+        end_time: prev[dateStr]?.end_time ?? '17:00',
+        notes: prev[dateStr]?.notes ?? '',
+        [field]: value,
+      },
+    }));
+    // Mark as dirty — no longer just auto
+    setDirtyDays(prev => new Set([...prev, dateStr]));
+    setSaved(prev => { const n = new Set(prev); n.delete(dateStr); return n; });
   }
 
   async function saveEntry(dateStr: string) {
@@ -95,19 +125,15 @@ export function TimesheetWeek({ periodId, userId, currentUserId, days, entries, 
         edited_at: new Date().toISOString(),
       });
     }
-    setSaving(null);
-  }
 
-  function updateEntry(dateStr: string, field: 'start_time' | 'end_time' | 'notes', value: string) {
-    setLocalEntries(prev => ({
-      ...prev,
-      [dateStr]: {
-        start_time: prev[dateStr]?.start_time ?? '08:00',
-        end_time: prev[dateStr]?.end_time ?? '17:00',
-        notes: prev[dateStr]?.notes ?? '',
-        [field]: value,
-      },
-    }));
+    // Clear auto + dirty state, mark as saved
+    setAutoDays(prev => { const n = new Set(prev); n.delete(dateStr); return n; });
+    setDirtyDays(prev => { const n = new Set(prev); n.delete(dateStr); return n; });
+    setSaved(prev => new Set([...prev, dateStr]));
+    setSaving(null);
+
+    // Flash the saved indicator then clear it
+    setTimeout(() => setSaved(prev => { const n = new Set(prev); n.delete(dateStr); return n; }), 2000);
   }
 
   return (
@@ -135,35 +161,76 @@ export function TimesheetWeek({ periodId, userId, currentUserId, days, entries, 
         </div>
       )}
 
+      {/* Legend */}
+      <div className="flex items-center gap-4 text-xs text-gray-400 px-1">
+        <span className="flex items-center gap-1">
+          <span className="w-2 h-2 rounded-full bg-gray-300 inline-block" /> Auto-filled
+        </span>
+        <span className="flex items-center gap-1">
+          <span className="w-2 h-2 rounded-full bg-aas-blue inline-block" /> Confirmed
+        </span>
+      </div>
+
       {/* Day entries */}
       <div className="space-y-2">
         {days.map(dateStr => {
           const working = isWorkingDay(dateStr);
           const entry = localEntries[dateStr];
+          const isAuto = autoDays.has(dateStr) && !dirtyDays.has(dateStr);
+          const isDirty = dirtyDays.has(dateStr);
+          const isSaved = saved.has(dateStr);
           const dow = format(parseISO(dateStr), 'EEE');
           const dayNum = format(parseISO(dateStr), 'd MMM');
           const hours = entry ? calcHours(entry.start_time, entry.end_time) : '—';
 
           return (
-            <div key={dateStr} className={`bg-white rounded-xl border border-gray-100 p-3 ${!working ? 'opacity-50' : ''}`}>
+            <div
+              key={dateStr}
+              className={`bg-white rounded-xl border p-3 transition-colors ${
+                !working ? 'opacity-40 border-gray-50' :
+                isAuto ? 'border-gray-200' :
+                isDirty ? 'border-amber-300 bg-amber-50/30' :
+                'border-gray-100'
+              }`}
+            >
               <div className="flex items-center justify-between mb-2">
-                <div>
+                <div className="flex items-center gap-2">
                   <span className="text-sm font-semibold text-gray-700">{dow}</span>
-                  <span className="text-xs text-gray-400 ml-2">{dayNum}</span>
+                  <span className="text-xs text-gray-400">{dayNum}</span>
+                  {working && isAuto && (
+                    <span className="text-[10px] bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded font-medium">auto</span>
+                  )}
+                  {working && isDirty && (
+                    <span className="text-[10px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded font-medium">edited</span>
+                  )}
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="text-xs font-medium text-aas-blue">{hours}</span>
-                  {canEdit && working && (
+                  {canEdit && working && (isAuto ? (
+                    // Auto entry: show a subtle "Confirm" button
                     <button
                       onClick={() => saveEntry(dateStr)}
                       disabled={saving === dateStr}
-                      className="text-xs px-2 py-1 bg-aas-blue text-white rounded-md disabled:opacity-50"
+                      className="text-xs px-2.5 py-1 border border-gray-300 text-gray-500 rounded-md hover:border-aas-blue hover:text-aas-blue disabled:opacity-50 transition-colors"
+                    >
+                      {saving === dateStr ? '…' : 'Confirm'}
+                    </button>
+                  ) : isSaved ? (
+                    <span className="flex items-center gap-1 text-xs text-green-600">
+                      <Check size={12} /> Saved
+                    </span>
+                  ) : isDirty ? (
+                    <button
+                      onClick={() => saveEntry(dateStr)}
+                      disabled={saving === dateStr}
+                      className="text-xs px-2.5 py-1 bg-aas-blue text-white rounded-md disabled:opacity-50"
                     >
                       {saving === dateStr ? '…' : 'Save'}
                     </button>
-                  )}
+                  ) : null)}
                 </div>
               </div>
+
               {working && (
                 <div className="grid grid-cols-2 gap-2">
                   <div>
@@ -173,7 +240,7 @@ export function TimesheetWeek({ periodId, userId, currentUserId, days, entries, 
                       value={entry?.start_time ?? '08:00'}
                       onChange={e => updateEntry(dateStr, 'start_time', e.target.value)}
                       disabled={!canEdit}
-                      className="w-full px-2 py-1.5 border border-gray-200 rounded-lg text-sm disabled:bg-gray-50"
+                      className={`w-full px-2 py-1.5 border rounded-lg text-sm disabled:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-aas-blue ${isDirty ? 'border-amber-300' : 'border-gray-200'}`}
                     />
                   </div>
                   <div>
@@ -183,7 +250,7 @@ export function TimesheetWeek({ periodId, userId, currentUserId, days, entries, 
                       value={entry?.end_time ?? '17:00'}
                       onChange={e => updateEntry(dateStr, 'end_time', e.target.value)}
                       disabled={!canEdit}
-                      className="w-full px-2 py-1.5 border border-gray-200 rounded-lg text-sm disabled:bg-gray-50"
+                      className={`w-full px-2 py-1.5 border rounded-lg text-sm disabled:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-aas-blue ${isDirty ? 'border-amber-300' : 'border-gray-200'}`}
                     />
                   </div>
                 </div>
