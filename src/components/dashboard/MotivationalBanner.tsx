@@ -55,7 +55,6 @@ const MESSAGES = [
   "If it doesn't challenge you, it doesn't change you. 🌊",
 ];
 
-// Handpicked over-the-top motivational shorts / clips
 const VIDEOS = [
   'https://www.youtube.com/shorts/pDQLnJYJ5tQ',
   'https://www.youtube.com/shorts/7Hb4W5TxNIE',
@@ -89,13 +88,8 @@ export function MotivationalBanner() {
     return () => clearInterval(interval);
   }, []);
 
-return (
-    
-      href={video}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="block bg-gradient-to-r from-aas-blue to-blue-500 rounded-xl px-4 py-3 cursor-pointer"
-    >
+  return (
+    <a href={video} target="_blank" rel="noopener noreferrer" className="block bg-gradient-to-r from-aas-blue to-blue-500 rounded-xl px-4 py-3 cursor-pointer">
       <p
         className="text-white text-sm font-medium text-center transition-opacity duration-300 select-none"
         style={{ opacity: visible ? 1 : 0 }}
@@ -104,3 +98,4 @@ return (
       </p>
     </a>
   );
+}
