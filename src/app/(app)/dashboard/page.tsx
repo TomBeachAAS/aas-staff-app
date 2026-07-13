@@ -23,12 +23,17 @@ export default async function DashboardPage() {
   const sevenDaysAgo = format(subDays(new Date(), 7), 'yyyy-MM-dd');
   const weekStart = format(startOfWeek(new Date(), { weekStartsOn: 1 }), 'yyyy-MM-dd');
 
+  const todayStart = today + 'T00:00:00';
+  const todayEnd = today + 'T23:59:59';
+  const sevenDaysAgoStart = sevenDaysAgo + 'T00:00:00';
+  const weekStartDt = weekStart + 'T00:00:00';
+
   const { data: todayEvents } = await supabase
     .from('calendar_events')
     .select('*, customer:customers(company_name), location:locations(name)')
     .eq('user_id', user.id)
-    .lte('start_datetime', `${today}T23:59:59`)
-    .gte('end_datetime', `${today}T00:00:00`)
+    .lte('start_datetime', todayEnd)
+    .gte('end_datetime', todayStart)
     .order('start_datetime');
 
   const { data: myTasks } = await supabase
@@ -45,7 +50,7 @@ export default async function DashboardPage() {
     .select('id, title, updated_at')
     .eq('created_by', user.id)
     .eq('status', 'completed')
-    .gte('updated_at', `${sevenDaysAgo}T00:00:00`)
+    .gte('updated_at', sevenDaysAgoStart)
     .order('updated_at', { ascending: false })
     .limit(5);
 
@@ -54,7 +59,7 @@ export default async function DashboardPage() {
     { count: completedJobsThisWeek },
   ] = await Promise.all([
     supabase.from('job_board').select('*', { count: 'exact', head: true }).in('status', ['open', 'in_progress']),
-    supabase.from('job_board').select('*', { count: 'exact', head: true }).eq('status', 'completed').gte('completed_at', `${weekStart}T00:00:00`),
+    supabase.from('job_board').select('*', { count: 'exact', head: true }).eq('status', 'completed').gte('completed_at', weekStartDt),
   ]);
 
   let pendingApprovals: number | null = null;
@@ -125,7 +130,7 @@ export default async function DashboardPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Today&apos;s schedule</CardTitle>
+          <CardTitle>Today's schedule</CardTitle>
         </CardHeader>
         {(todayEvents ?? []).length === 0 ? (
           <CardContent>
@@ -160,7 +165,7 @@ export default async function DashboardPage() {
             <p className="text-xs font-semibold text-red-500 uppercase tracking-wider mb-2">Overdue</p>
             <div className="space-y-2">
               {overdueTasks.slice(0, 3).map((task: any) => (
-                <Link key={task.id} href={`/tasks/${task.id}`} className="flex items-center gap-2 group">
+                <Link key={task.id} href={'/tasks/' + task.id} className="flex items-center gap-2 group">
                   <div className="w-4 h-4 rounded border-2 border-red-300 shrink-0" />
                   <span className="text-sm text-gray-700 group-hover:text-aas-blue truncate">{task.title}</span>
                   <span className="text-xs text-red-400 shrink-0">{task.task_date}</span>
@@ -175,7 +180,7 @@ export default async function DashboardPage() {
             <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Due today</p>
             <div className="space-y-2">
               {todayTasks.slice(0, 5).map((task: any) => (
-                <Link key={task.id} href={`/tasks/${task.id}`} className="flex items-center gap-2 group">
+                <Link key={task.id} href={'/tasks/' + task.id} className="flex items-center gap-2 group">
                   <div className="w-4 h-4 rounded border-2 border-gray-300 shrink-0" />
                   <span className="text-sm text-gray-700 group-hover:text-aas-blue truncate">{task.title}</span>
                 </Link>
@@ -186,14 +191,14 @@ export default async function DashboardPage() {
 
         {todayTasks.length === 0 && overdueTasks.length === 0 && (completedTasks ?? []).length === 0 && (
           <CardContent>
-            <p className="text-sm text-gray-400 text-center py-4">No tasks due — nice work! ✓</p>
+            <p className="text-sm text-gray-400 text-center py-4">No tasks due — nice work!</p>
           </CardContent>
         )}
 
         {(completedTasks ?? []).length > 0 && (
           <div className={`px-4 pb-4 pt-3 ${(todayTasks.length > 0 || overdueTasks.length > 0) ? 'border-t border-gray-50 mt-1' : ''}`}>
             <p className="text-xs font-semibold text-green-600 uppercase tracking-wider mb-2">
-              Completed last 7 days ({(completedTasks ?? []).length})
+              {'Completed last 7 days (' + (completedTasks ?? []).length + ')'}
             </p>
             <div className="space-y-1.5">
               {(completedTasks ?? []).map((task: any) => (
@@ -215,10 +220,9 @@ export default async function DashboardPage() {
               className="flex items-center justify-between text-sm text-aas-blue font-medium hover:underline"
             >
               <span>
-                Review {pendingApprovals} pending holiday{' '}
-                {pendingApprovals === 1 ? 'request' : 'requests'}
+                Review {pendingApprovals} pending holiday {pendingApprovals === 1 ? 'request' : 'requests'}
               </span>
-              <span>→</span>
+              <span>{'>'}</span>
             </Link>
           </CardContent>
         </Card>
