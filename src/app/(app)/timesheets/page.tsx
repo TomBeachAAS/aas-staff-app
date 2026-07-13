@@ -1,264 +1,165 @@
-'use client';
+import { createClient } from '@/lib/supabase/server';
+import { redirect } from 'next/navigation';
+import { format, startOfWeek, endOfWeek, eachDayOfInterval, addWeeks } from 'date-fns';
+import { TimesheetWeek } from '@/components/timesheets/TimesheetWeek';
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { format, parseISO } from 'date-fns';
-import { ChevronLeft, ChevronRight, Lock, Check } from 'lucide-react';
-import { createClient } from '@/lib/supabase/client';
-import type { TimesheetEntry, WorkingPattern } from '@/types/database';
+export const dynamic = 'force-dynamic';
 
-interface Props {
-  periodId: string;
-  userId: string;
-  currentUserId: string;
-  days: string[];
-  entries: TimesheetEntry[];
-  workingPattern: WorkingPattern | null;
-  weekStartStr: string;
-  prevWeek: string;
-  nextWeek: string;
-  isLocked: boolean;
-  canEdit: boolean;
-}
+export default async function TimesheetsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ week?: string; user?: string }>;
+}) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) redirect('/login');
 
-export function TimesheetWeek({ periodId, userId, currentUserId, days, entries, workingPattern, weekStartStr, prevWeek, nextWeek, isLocked, canEdit }: Props) {
-  const router = useRouter();
+  const { data: profile } = await supabase.from('profiles').select('*').eq('id', user.id).single();
+  if (!profile?.timesheet_access) redirect('/dashboard');
 
-  const [localEntries, setLocalEntries] = useState<Record<string, { start_time: string; end_time: string; notes: string }>>(() => {
-    const map: Record<string, { start_time: string; end_time: string; notes: string }> = {};
-    entries.forEach(e => {
-      map[e.work_date] = {
-        start_time: e.start_time.slice(0, 5),
-        end_time: e.end_time.slice(0, 5),
-        notes: e.notes ?? '',
-      };
-    });
-    return map;
-  });
+  const sp = await searchParams;
+  const weekStart = sp.week ? new Date(sp.week) : startOfWeek(new Date(), { weekStartsOn: 1 });
+  const weekEnd = endOfWeek(weekStart, { weekStartsOn: 1 });
+  const days = eachDayOfInterval({ start: weekStart, end: weekEnd });
+  const weekStartStr = format(weekStart, 'yyyy-MM-dd');
+  const weekEndStr = format(weekEnd, 'yyyy-MM-dd');
+  const viewUserId = sp.user ?? user.id;
 
-  // Track which days are auto-populated but not yet manually confirmed
-  const [autoDays, setAutoDays] = useState<Set<string>>(() => {
-    const set = new Set<string>();
-    entries.forEach(e => {
-      if ((e as any).is_auto_populated) set.add(e.work_date);
-    });
-    return set;
-  });
+  // Get or create timesheet period
+  const { data: existing } = await supabase
+    .from('timesheet_periods')
+    .select('*')
+    .eq('user_id', viewUserId)
+    .eq('period_start', weekStartStr)
+    .single();
 
-  // Track which days have been edited since load
-  const [dirtyDays, setDirtyDays] = useState<Set<string>>(new Set());
-  const [saving, setSaving] = useState<string | null>(null);
-  const [saved, setSaved] = useState<Set<string>>(new Set());
-
-  const dayKeys: Record<number, keyof WorkingPattern> = { 1: 'mon', 2: 'tue', 3: 'wed', 4: 'thu', 5: 'fri', 6: 'sat', 0: 'sun' };
-
-  function isWorkingDay(dateStr: string) {
-    const dow = parseISO(dateStr).getDay();
-    if (!workingPattern) return dow >= 1 && dow <= 5;
-    return workingPattern[dayKeys[dow]] as boolean;
+  let period = existing;
+  if (!period) {
+    const { data: newPeriod } = await supabase
+      .from('timesheet_periods')
+      .insert({
+        user_id: viewUserId,
+        period_start: weekStartStr,
+        period_end: weekEndStr,
+      })
+      .select()
+      .single();
+    period = newPeriod;
   }
 
-  function calcHours(start: string, end: string): string {
-    if (!start || !end) return '—';
-    const [sh, sm] = start.split(':').map(Number);
-    const [eh, em] = end.split(':').map(Number);
-    const mins = (eh * 60 + em) - (sh * 60 + sm);
-    if (mins <= 0) return '—';
-    return `${Math.floor(mins / 60)}h${mins % 60 ? ` ${mins % 60}m` : ''}`;
+  // Fetch working pattern, approved leave and sickness for this week in parallel
+  const [
+    { data: workingPattern },
+    { data: leaveThisWeek },
+    { data: sicknessThisWeek },
+  ] = await Promise.all([
+    supabase.from('working_patterns').select('*').eq('user_id', viewUserId).eq('is_current', true).single(),
+    supabase.from('holidays').select('start_date, end_date').eq('user_id', viewUserId).eq('status', 'approved').lte('start_date', weekEndStr).gte('end_date', weekStartStr),
+    supabase.from('sickness_records').select('start_date, end_date').eq('user_id', viewUserId).lte('start_date', weekEndStr).or(`end_date.is.null,end_date.gte.${weekStartStr}`),
+  ]);
+
+  // Get existing entries
+  let entries: any[] = [];
+  if (period) {
+    const { data } = await supabase
+      .from('timesheet_entries')
+      .select('*')
+      .eq('period_id', period.id)
+      .order('work_date');
+    entries = data ?? [];
   }
 
-  function totalWeekHours(): string {
-    let total = 0;
-    Object.values(localEntries).forEach(({ start_time, end_time }) => {
-      if (start_time && end_time) {
-        const [sh, sm] = start_time.split(':').map(Number);
-        const [eh, em] = end_time.split(':').map(Number);
-        const mins = (eh * 60 + em) - (sh * 60 + sm);
-        if (mins > 0) total += mins;
-      }
-    });
-    if (total === 0) return '0h';
-    return `${Math.floor(total / 60)}h${total % 60 ? ` ${total % 60}m` : ''}`;
-  }
+  // Auto-populate working days that don't already have an entry,
+  // skipping days with approved leave or sickness
+  if (period) {
+    const DAY_KEYS: Record<number, string> = {
+      0: 'sun', 1: 'mon', 2: 'tue', 3: 'wed', 4: 'thu', 5: 'fri', 6: 'sat',
+    };
+    const wp = workingPattern as any;
+    const existingDates = new Set(entries.map((e: any) => e.work_date));
 
-  function updateEntry(dateStr: string, field: 'start_time' | 'end_time' | 'notes', value: string) {
-    setLocalEntries(prev => ({
-      ...prev,
-      [dateStr]: {
-        start_time: prev[dateStr]?.start_time ?? '08:00',
-        end_time: prev[dateStr]?.end_time ?? '17:00',
-        notes: prev[dateStr]?.notes ?? '',
-        [field]: value,
-      },
-    }));
-    // Mark as dirty — no longer just auto
-    setDirtyDays(prev => new Set([...prev, dateStr]));
-    setSaved(prev => { const n = new Set(prev); n.delete(dateStr); return n; });
-  }
+    // Derive hours per day from weekly_hours / number of working days
+    const workingDayCount = wp
+      ? ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'].filter(d => wp[d]).length
+      : 5;
+    const hoursPerDay = wp?.weekly_hours ? wp.weekly_hours / (workingDayCount || 5) : 8;
+    const endHour = 8 + Math.floor(hoursPerDay);
+    const endMin = Math.round((hoursPerDay % 1) * 60);
+    const defaultStart = '08:00:00';
+    const defaultEnd = `${String(endHour).padStart(2, '0')}:${String(endMin).padStart(2, '0')}:00`;
 
-  async function saveEntry(dateStr: string) {
-    if (!periodId || !canEdit) return;
-    setSaving(dateStr);
-    const supabase = createClient();
-    const entry = localEntries[dateStr];
-    const existing = entries.find(e => e.work_date === dateStr);
+    const missingDays = days
+      .map(d => format(d, 'yyyy-MM-dd'))
+      .filter(dateStr => {
+        if (existingDates.has(dateStr)) return false;
 
-    if (existing) {
-      await supabase.from('timesheet_entries').update({
-        start_time: entry.start_time,
-        end_time: entry.end_time,
-        notes: entry.notes || null,
-        is_auto_populated: false,
-        edited_by: currentUserId,
-        edited_at: new Date().toISOString(),
-      }).eq('id', existing.id);
-    } else {
-      await supabase.from('timesheet_entries').insert({
-        period_id: periodId,
-        user_id: userId,
-        work_date: dateStr,
-        start_time: entry?.start_time ?? '08:00',
-        end_time: entry?.end_time ?? '17:00',
-        notes: entry?.notes || null,
-        is_auto_populated: false,
-        edited_by: currentUserId,
-        edited_at: new Date().toISOString(),
+        // Check working pattern
+        const dow = new Date(dateStr + 'T12:00:00').getDay();
+        if (wp) {
+          if (!wp[DAY_KEYS[dow]]) return false;
+        } else {
+          if (dow === 0 || dow === 6) return false;
+        }
+
+        // Skip approved leave days
+        const onLeave = (leaveThisWeek ?? []).some(
+          (h: any) => dateStr >= h.start_date && dateStr <= h.end_date
+        );
+        if (onLeave) return false;
+
+        // Skip sickness days
+        const onSick = (sicknessThisWeek ?? []).some(
+          (s: any) => dateStr >= s.start_date && (s.end_date === null || dateStr <= s.end_date)
+        );
+        if (onSick) return false;
+
+        return true;
       });
+
+    if (missingDays.length > 0) {
+      await supabase.from('timesheet_entries').insert(
+        missingDays.map(dateStr => ({
+          period_id: period!.id,
+          user_id: viewUserId,
+          work_date: dateStr,
+          start_time: defaultStart,
+          end_time: defaultEnd,
+          is_auto_populated: true,
+        }))
+      );
+
+      // Re-fetch after insert
+      const { data: refreshed } = await supabase
+        .from('timesheet_entries')
+        .select('*')
+        .eq('period_id', period.id)
+        .order('work_date');
+      entries = refreshed ?? [];
     }
-
-    // Clear auto + dirty state, mark as saved
-    setAutoDays(prev => { const n = new Set(prev); n.delete(dateStr); return n; });
-    setDirtyDays(prev => { const n = new Set(prev); n.delete(dateStr); return n; });
-    setSaved(prev => new Set([...prev, dateStr]));
-    setSaving(null);
-
-    // Flash the saved indicator then clear it
-    setTimeout(() => setSaved(prev => { const n = new Set(prev); n.delete(dateStr); return n; }), 2000);
   }
+
+  const isManagerOrAdmin = ['administrator', 'manager'].includes(profile.role);
+  const isLocked = period?.is_locked ?? false;
+  const canEdit = (!isLocked || isManagerOrAdmin) && (viewUserId === user.id || isManagerOrAdmin);
+  const prevWeek = format(addWeeks(weekStart, -1), 'yyyy-MM-dd');
+  const nextWeek = format(addWeeks(weekStart, 1), 'yyyy-MM-dd');
 
   return (
-    <div className="space-y-4">
-      {/* Week navigation */}
-      <div className="flex items-center justify-between bg-white rounded-xl border border-gray-100 px-4 py-3">
-        <button onClick={() => router.push(`/timesheets?week=${prevWeek}&user=${userId}`)} className="p-1.5 rounded-lg hover:bg-gray-100">
-          <ChevronLeft size={16} />
-        </button>
-        <div className="text-center">
-          <p className="text-sm font-semibold text-gray-800">
-            {format(parseISO(weekStartStr), 'd MMM')} – {format(parseISO(days[6]), 'd MMM yyyy')}
-          </p>
-          <p className="text-xs text-gray-400">{totalWeekHours()} total</p>
-        </div>
-        <button onClick={() => router.push(`/timesheets?week=${nextWeek}&user=${userId}`)} className="p-1.5 rounded-lg hover:bg-gray-100">
-          <ChevronRight size={16} />
-        </button>
-      </div>
-
-      {isLocked && (
-        <div className="flex items-center gap-2 bg-amber-50 border border-amber-100 rounded-xl px-4 py-2.5 text-sm text-amber-700">
-          <Lock size={14} />
-          This timesheet period is locked
-        </div>
-      )}
-
-      {/* Legend */}
-      <div className="flex items-center gap-4 text-xs text-gray-400 px-1">
-        <span className="flex items-center gap-1">
-          <span className="w-2 h-2 rounded-full bg-gray-300 inline-block" /> Auto-filled
-        </span>
-        <span className="flex items-center gap-1">
-          <span className="w-2 h-2 rounded-full bg-aas-blue inline-block" /> Confirmed
-        </span>
-      </div>
-
-      {/* Day entries */}
-      <div className="space-y-2">
-        {days.map(dateStr => {
-          const working = isWorkingDay(dateStr);
-          const entry = localEntries[dateStr];
-          const isAuto = autoDays.has(dateStr) && !dirtyDays.has(dateStr);
-          const isDirty = dirtyDays.has(dateStr);
-          const isSaved = saved.has(dateStr);
-          const dow = format(parseISO(dateStr), 'EEE');
-          const dayNum = format(parseISO(dateStr), 'd MMM');
-          const hours = entry ? calcHours(entry.start_time, entry.end_time) : '—';
-
-          return (
-            <div
-              key={dateStr}
-              className={`bg-white rounded-xl border p-3 transition-colors ${
-                !working ? 'opacity-40 border-gray-50' :
-                isAuto ? 'border-gray-200' :
-                isDirty ? 'border-amber-300 bg-amber-50/30' :
-                'border-gray-100'
-              }`}
-            >
-              <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-2">
-                  <span className="text-sm font-semibold text-gray-700">{dow}</span>
-                  <span className="text-xs text-gray-400">{dayNum}</span>
-                  {working && isAuto && (
-                    <span className="text-[10px] bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded font-medium">auto</span>
-                  )}
-                  {working && isDirty && (
-                    <span className="text-[10px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded font-medium">edited</span>
-                  )}
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-medium text-aas-blue">{hours}</span>
-                  {canEdit && working && (isAuto ? (
-                    // Auto entry: show a subtle "Confirm" button
-                    <button
-                      onClick={() => saveEntry(dateStr)}
-                      disabled={saving === dateStr}
-                      className="text-xs px-2.5 py-1 border border-gray-300 text-gray-500 rounded-md hover:border-aas-blue hover:text-aas-blue disabled:opacity-50 transition-colors"
-                    >
-                      {saving === dateStr ? '…' : 'Confirm'}
-                    </button>
-                  ) : isSaved ? (
-                    <span className="flex items-center gap-1 text-xs text-green-600">
-                      <Check size={12} /> Saved
-                    </span>
-                  ) : isDirty ? (
-                    <button
-                      onClick={() => saveEntry(dateStr)}
-                      disabled={saving === dateStr}
-                      className="text-xs px-2.5 py-1 bg-aas-blue text-white rounded-md disabled:opacity-50"
-                    >
-                      {saving === dateStr ? '…' : 'Save'}
-                    </button>
-                  ) : null)}
-                </div>
-              </div>
-
-              {working && (
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <label className="text-xs text-gray-400">Start</label>
-                    <input
-                      type="time"
-                      value={entry?.start_time ?? '08:00'}
-                      onChange={e => updateEntry(dateStr, 'start_time', e.target.value)}
-                      disabled={!canEdit}
-                      className={`w-full px-2 py-1.5 border rounded-lg text-sm disabled:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-aas-blue ${isDirty ? 'border-amber-300' : 'border-gray-200'}`}
-                    />
-                  </div>
-                  <div>
-                    <label className="text-xs text-gray-400">Finish</label>
-                    <input
-                      type="time"
-                      value={entry?.end_time ?? '17:00'}
-                      onChange={e => updateEntry(dateStr, 'end_time', e.target.value)}
-                      disabled={!canEdit}
-                      className={`w-full px-2 py-1.5 border rounded-lg text-sm disabled:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-aas-blue ${isDirty ? 'border-amber-300' : 'border-gray-200'}`}
-                    />
-                  </div>
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
+    <div className="p-4 space-y-4 max-w-3xl mx-auto">
+      <h2 className="text-lg font-bold text-gray-800">Timesheets</h2>
+      <TimesheetWeek
+        periodId={period?.id ?? ''}
+        userId={viewUserId}
+        currentUserId={user.id}
+        days={days.map(d => format(d, 'yyyy-MM-dd'))}
+        entries={entries}
+        workingPattern={workingPattern}
+        weekStartStr={weekStartStr}
+        prevWeek={prevWeek}
+        nextWeek={nextWeek}
+        isLocked={isLocked}
+        canEdit={canEdit}
+      />
     </div>
   );
 }
