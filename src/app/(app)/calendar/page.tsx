@@ -36,15 +36,12 @@ export default async function CalendarPage({
   const view = (sp.view ?? 'month') as 'day' | 'week' | 'month' | 'timeline';
   const dateStr = sp.date ?? new Date().toISOString().split('T')[0];
 
-  let allStaff = null;
-  if (['administrator', 'manager'].includes(effectiveRole)) {
-    const { data } = await supabase
-      .from('profiles')
-      .select('id, full_name, role')
-      .eq('status', 'active')
-      .order('full_name');
-    allStaff = data;
-  }
+  // Always fetch all staff — needed for name display for all roles
+  const { data: allStaff } = await supabase
+    .from('profiles')
+    .select('id, full_name, role')
+    .eq('status', 'active')
+    .order('full_name');
 
   const { data: bankHolidays } = await supabase
     .from('bank_holidays')
