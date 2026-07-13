@@ -83,7 +83,6 @@ export function TimesheetWeek({
     return !!(workingPattern as any)[DAY_KEY_MAP[dow]];
   }
 
-  // Gross minutes between two HH:mm times
   function grossMins(start: string, end: string): number {
     if (!start || !end) return 0;
     const [sh, sm] = start.split(':').map(Number);
@@ -91,7 +90,6 @@ export function TimesheetWeek({
     return (eh * 60 + em) - (sh * 60 + sm);
   }
 
-  // Net minutes after automatic 1-hour lunch deduction
   function netMins(start: string, end: string): number {
     const g = grossMins(start, end);
     if (g <= 0) return 0;
@@ -103,7 +101,6 @@ export function TimesheetWeek({
     return `${Math.floor(mins / 60)}h${mins % 60 ? ` ${mins % 60}m` : ''}`;
   }
 
-  // Total uses fallback times for days without a saved entry so header shows correctly
   function totalWeekHours(): string {
     let total = 0;
     days.forEach(dateStr => {
@@ -254,6 +251,28 @@ export function TimesheetWeek({
         </div>
       )}
 
+      {/* Submit / Approve button — shown above days so it's always visible */}
+      {canSubmit && (
+        <button
+          onClick={() => lockPeriod('submit')}
+          disabled={locking}
+          className="w-full flex items-center justify-center gap-2 py-3 bg-aas-blue text-white rounded-xl font-medium text-sm disabled:opacity-60"
+        >
+          <Send size={15} />
+          {locking ? 'Submitting…' : 'Submit this week'}
+        </button>
+      )}
+      {canApprove && (
+        <button
+          onClick={() => lockPeriod('approve')}
+          disabled={locking}
+          className="w-full flex items-center justify-center gap-2 py-3 bg-green-600 text-white rounded-xl font-medium text-sm disabled:opacity-60"
+        >
+          <ThumbsUp size={15} />
+          {locking ? 'Approving…' : 'Approve this timesheet'}
+        </button>
+      )}
+
       {/* Confirm all banner */}
       {!locked && canEdit && pendingAutoCount > 1 && (
         <div className="flex items-center justify-between bg-blue-50 border border-blue-100 rounded-xl px-4 py-2.5">
@@ -299,7 +318,6 @@ export function TimesheetWeek({
           const timeInvalid = !!(startVal && endVal && gross <= 0);
           const hours = fmtMins(netMins(startVal, endVal));
 
-          // Collapsed off-day
           if (!isExpanded) {
             return (
               <div key={dateStr} className="bg-white rounded-xl border border-gray-100 px-3 py-2.5 flex items-center justify-between">
@@ -320,7 +338,6 @@ export function TimesheetWeek({
             );
           }
 
-          // Expanded day
           return (
             <div
               key={dateStr}
@@ -422,7 +439,7 @@ export function TimesheetWeek({
         })}
       </div>
 
-      {/* Submit button — employee */}
+      {/* Submit button — repeated at bottom for convenience */}
       {canSubmit && (
         <button
           onClick={() => lockPeriod('submit')}
@@ -433,8 +450,6 @@ export function TimesheetWeek({
           {locking ? 'Submitting…' : 'Submit this week'}
         </button>
       )}
-
-      {/* Approve button — manager */}
       {canApprove && (
         <button
           onClick={() => lockPeriod('approve')}
