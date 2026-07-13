@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/Badge';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { ROLE_LABELS } from '@/lib/utils';
 import { StaffActionButtons } from '@/components/staff/StaffActionButtons';
+import { Clock } from 'lucide-react'
 
 export const dynamic = 'force-dynamic';
 
@@ -86,6 +87,19 @@ export default async function StaffDetailPage({ params }: { params: Promise<{ id
           </CardContent>
         </Card>
       )}
+
+      {profile.timesheet_access && (
+  <Link
+    href={`/timesheets?user=${id}`}
+    className="flex items-center gap-3 bg-white rounded-xl border border-gray-100 px-4 py-3 hover:bg-gray-50 transition-colors"
+  >
+    <Clock size={18} className="text-aas-blue shrink-0" />
+    <div>
+      <p className="text-sm font-medium text-gray-800">View timesheets</p>
+      <p className="text-xs text-gray-400">Review and approve {profile.full_name.split(' ')[0]}'s hours</p>
+    </div>
+  </Link>
+)}
 
       {isAdmin && (
         <StaffActionButtons
