@@ -12,12 +12,12 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json();
-  const { name, contact_name, email, phone, address, city, postcode, notes } = body;
+  const { company_name, contact_name, email, phone, address, city, postcode, notes } = body;
 
-  if (!name) return NextResponse.json({ error: 'Company name is required.' }, { status: 400 });
+  if (!company_name) return NextResponse.json({ error: 'Company name is required.' }, { status: 400 });
 
   const { data, error } = await supabase.from('customers').insert({
-    name,
+    company_name,
     contact_name: contact_name || null,
     email: email || null,
     phone: phone || null,
