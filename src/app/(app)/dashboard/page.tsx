@@ -23,7 +23,6 @@ export default async function DashboardPage() {
   const sevenDaysAgo = format(subDays(new Date(), 7), 'yyyy-MM-dd');
   const weekStart = format(startOfWeek(new Date(), { weekStartsOn: 1 }), 'yyyy-MM-dd');
 
-  // Today's calendar events
   const { data: todayEvents } = await supabase
     .from('calendar_events')
     .select('*, customer:customers(company_name), location:locations(name)')
@@ -32,7 +31,6 @@ export default async function DashboardPage() {
     .gte('end_datetime', `${today}T00:00:00`)
     .order('start_datetime');
 
-  // My tasks due today or overdue
   const { data: myTasks } = await supabase
     .from('tasks')
     .select('*')
@@ -42,7 +40,6 @@ export default async function DashboardPage() {
     .order('task_date')
     .limit(10);
 
-  // Tasks completed in the last 7 days
   const { data: completedTasks } = await supabase
     .from('tasks')
     .select('id, title, updated_at')
@@ -52,7 +49,6 @@ export default async function DashboardPage() {
     .order('updated_at', { ascending: false })
     .limit(5);
 
-  // Job board stats
   const [
     { count: openJobsCount },
     { count: completedJobsThisWeek },
@@ -61,7 +57,6 @@ export default async function DashboardPage() {
     supabase.from('job_board').select('*', { count: 'exact', head: true }).eq('status', 'completed').gte('completed_at', `${weekStart}T00:00:00`),
   ]);
 
-  // Manager data
   let pendingApprovals: number | null = null;
   let staffOffToday: number | null = null;
   let overdueTaskCount: number | null = null;
@@ -90,7 +85,6 @@ export default async function DashboardPage() {
 
   return (
     <div className="p-4 space-y-4 max-w-4xl mx-auto">
-      {/* Greeting */}
       <div>
         <h2 className="text-lg font-bold text-gray-800">
           Good {getGreeting()}, {profile.full_name.split(' ')[0]}
@@ -98,7 +92,6 @@ export default async function DashboardPage() {
         <p className="text-sm text-gray-500">{format(new Date(), 'EEEE, d MMMM yyyy')}</p>
       </div>
 
-      {/* Robotti quick link */}
       
         href="https://robotti.agrointelli.com/"
         target="_blank"
@@ -112,13 +105,10 @@ export default async function DashboardPage() {
         <ExternalLink size={18} className="text-green-300 shrink-0" />
       </a>
 
-      {/* Motivational message */}
       <MotivationalBanner />
 
-      {/* Weather */}
       <WeatherWidget />
 
-      {/* Manager overview stats */}
       {isManagerOrAdmin && (
         <div className="grid grid-cols-2 gap-3">
           <StatCard label="Pending Approvals"  value={pendingApprovals ?? 0}  icon={Umbrella}    iconColor="text-amber-600"  iconBg="bg-amber-50"  />
@@ -128,13 +118,11 @@ export default async function DashboardPage() {
         </div>
       )}
 
-      {/* Job board summary */}
       <div className="grid grid-cols-2 gap-3">
         <StatCard label="Jobs Open"           value={openJobsCount ?? 0}         icon={Briefcase}   iconColor="text-orange-600" iconBg="bg-orange-50" />
         <StatCard label="Completed This Week" value={completedJobsThisWeek ?? 0} icon={CheckSquare} iconColor="text-green-600"  iconBg="bg-green-50"  />
       </div>
 
-      {/* Today's schedule */}
       <Card>
         <CardHeader>
           <CardTitle>Today&apos;s schedule</CardTitle>
@@ -161,7 +149,6 @@ export default async function DashboardPage() {
         )}
       </Card>
 
-      {/* Tasks */}
       <Card>
         <CardHeader className="flex items-center justify-between">
           <CardTitle>Tasks</CardTitle>
