@@ -10,6 +10,7 @@ import { Camera, X, Image } from 'lucide-react';
 export default function NewExpensePage() {
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const submitIntentRef = useRef<'draft' | 'submitted'>('submitted');
 
   const [form, setForm] = useState({
     claim_date: format(new Date(), 'yyyy-MM-dd'),
@@ -20,7 +21,7 @@ export default function NewExpensePage() {
   });
   const [receipt, setReceipt] = useState<File | null>(null);
   const [receiptPreview, setReceiptPreview] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState<'draft' | 'submitted' | null>(null);
   const [error, setError] = useState('');
 
   function set(key: string, value: string) {
@@ -46,7 +47,9 @@ export default function NewExpensePage() {
       setError('Description and amount are required.');
       return;
     }
-    setLoading(true);
+
+    const intent = submitIntentRef.current;
+    setLoading(intent);
     const supabase = createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
@@ -60,7 +63,7 @@ export default function NewExpensePage() {
         .upload(path, receipt, { upsert: false });
       if (uploadErr) {
         setError('Receipt upload failed: ' + uploadErr.message);
-        setLoading(false);
+        setLoading(null);
         return;
       }
       const { data: { publicUrl } } = supabase.storage
@@ -78,10 +81,10 @@ export default function NewExpensePage() {
       currency: 'GBP',
       notes: form.notes || null,
       receipt_url,
-      status: 'draft',
+      status: intent,
     });
 
-    if (err) { setError(err.message); setLoading(false); return; }
+    if (err) { setError(err.message); setLoading(null); return; }
     router.push('/expenses');
   }
 
@@ -148,11 +151,28 @@ export default function NewExpensePage() {
           )}
         </div>
 
-        <div className="flex gap-3 pt-1">
-          <button type="button" onClick={() => router.back()} className="flex-1 py-2.5 border border-gray-200 rounded-lg text-sm text-gray-600">Cancel</button>
-          <button type="submit" disabled={loading} className="flex-1 py-2.5 bg-aas-blue text-white rounded-lg text-sm font-medium disabled:opacity-60">
-            {loading ? (receipt ? 'Uploading…' : 'Saving…') : 'Save as draft'}
+        <div className="space-y-2 pt-1">
+          <button
+            type="submit"
+            disabled={loading !== null}
+            onClick={() => { submitIntentRef.current = 'submitted'; }}
+            className="w-full py-3 bg-aas-blue text-white rounded-xl text-sm font-semibold disabled:opacity-60"
+          >
+            {loading === 'submitted' ? (receipt ? 'Uploading…' : 'Submitting…') : 'Submit for approval'}
           </button>
+          <div className="flex gap-3">
+            <button type="button" onClick={() => router.back()} className="flex-1 py-2.5 border border-gray-200 rounded-lg text-sm text-gray-600">
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={loading !== null}
+              onClick={() => { submitIntentRef.current = 'draft'; }}
+              className="flex-1 py-2.5 border border-gray-200 rounded-lg text-sm text-gray-500 disabled:opacity-60"
+            >
+              {loading === 'draft' ? 'Saving…' : 'Save as draft'}
+            </button>
+          </div>
         </div>
       </form>
     </div>
