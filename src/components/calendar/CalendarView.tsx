@@ -1,5 +1,4 @@
 'use client';
-
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import {
@@ -11,10 +10,8 @@ import { ChevronLeft, ChevronRight, Plus, X } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { CALENDAR_EVENT_COLOURS, CALENDAR_EVENT_LABELS, cn } from '@/lib/utils';
 import type { CalendarEvent, BankHoliday, Profile } from '@/types/database';
-
 const VIEWS = ['day', 'week', 'month', 'timeline'] as const;
 type CalView = typeof VIEWS[number];
-
 interface Props {
   currentUserId: string;
   profile: Profile;
@@ -23,7 +20,6 @@ interface Props {
   allStaff: Pick<Profile, 'id' | 'full_name' | 'role'>[] | null;
   bankHolidays: BankHoliday[];
 }
-
 const MODAL_EVENT_TYPES = [
   { value: 'task',          label: 'Task',          pill: 'bg-aas-blue text-white border-aas-blue' },
   { value: 'holiday',       label: 'Annual Leave',  pill: 'bg-green-100 text-green-800 border-green-200' },
@@ -38,7 +34,6 @@ const MODAL_EVENT_TYPES = [
   { value: 'home_working',  label: 'Home Working',  pill: 'bg-purple-100 text-purple-800 border-purple-200' },
   { value: 'general_work',  label: 'General',       pill: 'bg-gray-100 text-gray-800 border-gray-200' },
 ];
-
 export function CalendarView({ currentUserId, profile, initialView, initialDate, allStaff, bankHolidays }: Props) {
   const router = useRouter();
   const [view, setView] = useState<CalView>(initialView);
@@ -50,10 +45,8 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
   const [completedJobs, setCompletedJobs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const isManagerOrAdmin = ['administrator', 'manager'].includes(profile.role);
-
   const [dayPanelOpen, setDayPanelOpen] = useState(false);
   const [dayPanelDate, setDayPanelDate] = useState<string | null>(null);
-
   const [modalOpen, setModalOpen] = useState(false);
   const [modalDate, setModalDate] = useState(format(new Date(), 'yyyy-MM-dd'));
   const [eventType, setEventType] = useState('general_work');
@@ -70,28 +63,26 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
   const [locationId, setLocationId] = useState('');
   const [saving, setSaving] = useState(false);
   const [modalError, setModalError] = useState('');
-
   const loadEvents = useCallback(async () => {
     setLoading(true);
     const supabase = createClient();
     let start: Date, end: Date;
-
     if (view === 'day') { start = current; end = current; }
     else if (view === 'week') { start = startOfWeek(current, { weekStartsOn: 1 }); end = endOfWeek(current, { weekStartsOn: 1 }); }
     else if (view === 'month') { start = startOfWeek(startOfMonth(current), { weekStartsOn: 1 }); end = endOfWeek(endOfMonth(current), { weekStartsOn: 1 }); }
     else { start = startOfWeek(current, { weekStartsOn: 1 }); end = addDays(start, 27); }
-
     const startStr = format(start, 'yyyy-MM-dd');
     const endStr = format(end, 'yyyy-MM-dd');
-
+    // FIX: use overlap filter with proper date strings
+    const rangeStart = startStr + 'T00:00:00';
+    const rangeEnd = endStr + 'T23:59:59';
     let eventsQuery = supabase
       .from('calendar_events')
       .select('*, user:profiles(id, full_name), customer:customers(company_name), location:locations(name)')
-      .gte('start_datetime', start.toISOString())
-      .lte('end_datetime', end.toISOString() + 'T23:59:59')
+      .lte('start_datetime', rangeEnd)
+      .gte('end_datetime', rangeStart)
       .order('start_datetime');
     if (!isManagerOrAdmin) eventsQuery = eventsQuery.eq('user_id', currentUserId);
-
     const tasksQuery = supabase
       .from('tasks')
       .select('id, title, task_date, status, priority, customer:customers(company_name)')
@@ -99,28 +90,24 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
       .lte('task_date', endStr)
       .not('status', 'eq', 'cancelled')
       .order('task_date');
-
     const holidaysQuery = supabase
       .from('holidays')
       .select('id, user_id, start_date, end_date')
       .eq('status', 'approved')
       .gte('end_date', startStr)
       .lte('start_date', endStr);
-
     const completedJobsQuery = supabase
       .from('job_board')
       .select('id, title, completed_by, completed_at, completion_notes')
       .eq('status', 'completed')
-      .gte('completed_at', start.toISOString())
-      .lte('completed_at', end.toISOString() + 'T23:59:59');
-
+      .gte('completed_at', rangeStart)
+      .lte('completed_at', rangeEnd);
     let sicknessQuery = supabase
       .from('sickness_records')
       .select('id, user_id, start_date, end_date')
       .lte('start_date', endStr)
-      .or(`end_date.is.null,end_date.gte.${startStr}`);
+      .or('end_date.is.null,end_date.gte.' + startStr);
     if (!isManagerOrAdmin) sicknessQuery = sicknessQuery.eq('user_id', currentUserId);
-
     const [
       { data: eventsData },
       { data: tasksData },
@@ -128,7 +115,6 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
       { data: completedJobsData },
       { data: sicknessData },
     ] = await Promise.all([eventsQuery, tasksQuery, holidaysQuery, completedJobsQuery, sicknessQuery]);
-
     setEvents((eventsData as CalendarEvent[]) ?? []);
     setTasks(tasksData ?? []);
     setHolidays(holidaysData ?? []);
@@ -136,9 +122,7 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
     setSickness(sicknessData ?? []);
     setLoading(false);
   }, [view, current, currentUserId, isManagerOrAdmin]);
-
   useEffect(() => { loadEvents(); }, [loadEvents]);
-
   useEffect(() => {
     if (!modalOpen) return;
     const supabase = createClient();
@@ -150,12 +134,10 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
       setLocations(l ?? []);
     });
   }, [modalOpen]);
-
   function openDayPanel(dateStr: string) {
     setDayPanelDate(dateStr);
     setDayPanelOpen(true);
   }
-
   function openModal(dateStr: string) {
     setModalDate(dateStr);
     setEndDate(dateStr);
@@ -171,16 +153,15 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
     setModalError('');
     setModalOpen(true);
   }
-
   async function handleSave() {
     setModalError('');
-    if (eventType === 'task') { setModalOpen(false); router.push(`/tasks/new?date=${modalDate}`); return; }
-    if (eventType === 'holiday') { setModalOpen(false); router.push(`/holidays/new?start=${modalDate}&end=${endDate || modalDate}`); return; }
-    if (eventType === 'sickness') { setModalOpen(false); router.push(`/sickness`); return; }
+    if (eventType === 'task') { setModalOpen(false); router.push('/tasks/new?date=' + modalDate); return; }
+    if (eventType === 'holiday') { setModalOpen(false); router.push('/holidays/new?start=' + modalDate + '&end=' + (endDate || modalDate)); return; }
+    if (eventType === 'sickness') { setModalOpen(false); router.push('/sickness'); return; }
     setSaving(true);
     const supabase = createClient();
-    const startDatetime = allDay ? `${modalDate}T00:00:00` : `${modalDate}T${startTime}:00`;
-    const endDatetime = allDay ? `${endDate || modalDate}T23:59:59` : `${modalDate}T${endTime}:00`;
+    const startDatetime = allDay ? (modalDate + 'T00:00:00') : (modalDate + 'T' + startTime + ':00');
+    const endDatetime = allDay ? ((endDate || modalDate) + 'T23:59:59') : (modalDate + 'T' + endTime + ':00');
     const { error } = await supabase.from('calendar_events').insert({
       user_id: targetUserId,
       event_type: eventType as any,
@@ -198,16 +179,13 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
     setModalOpen(false);
     loadEvents();
   }
-
   function navigate(dir: 1 | -1) {
     if (view === 'day') setCurrent(d => addDays(d, dir));
     else if (view === 'week') setCurrent(d => dir === 1 ? addWeeks(d, 1) : subWeeks(d, 1));
     else if (view === 'month') setCurrent(d => dir === 1 ? addMonths(d, 1) : subMonths(d, 1));
     else setCurrent(d => addDays(d, dir * 7 * 4));
   }
-
   const bankHolidayMap = new Map(bankHolidays.map(bh => [bh.date, bh.name]));
-
   function getEventsForDay(date: Date) {
     const dateStr = format(date, 'yyyy-MM-dd');
     return events.filter(e => {
@@ -235,16 +213,14 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
   function getStaffName(userId: string) {
     return allStaff?.find(s => s.id === userId)?.full_name ?? 'Staff';
   }
-
   // ── Chips ──────────────────────────────────────────────────
-
   function EventChip({ event }: { event: CalendarEvent }) {
     const colour = CALENDAR_EVENT_COLOURS[event.event_type] ?? 'bg-gray-100 text-gray-700';
     const label = event.title ?? CALENDAR_EVENT_LABELS[event.event_type] ?? event.event_type;
     const user = event.user as Pick<Profile, 'full_name'> | undefined;
     return (
       <div className={cn('text-xs px-1.5 py-0.5 rounded border truncate', colour)}>
-        {isManagerOrAdmin && user ? `${user.full_name.split(' ')[0]}: ` : ''}{label}
+        {isManagerOrAdmin && user ? (user.full_name.split(' ')[0] + ': ') : ''}{label}
       </div>
     );
   }
@@ -268,26 +244,25 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
     const isDone = task.status === 'completed';
     return (
       <div
-        onClick={(e) => { e.stopPropagation(); router.push(`/tasks/${task.id}`); }}
+        onClick={(e) => { e.stopPropagation(); router.push('/tasks/' + task.id); }}
         className={cn(
           'text-xs px-1.5 py-0.5 rounded border truncate cursor-pointer hover:opacity-80',
           isDone ? 'bg-green-100 text-green-800 border-green-200 line-through' : 'bg-aas-blue text-white border-aas-blue'
         )}
       >
-        ✓ {task.title}
+        {'✓ ' + task.title}
       </div>
     );
   }
   function CompletedJobChip({ job }: { job: any }) {
     return (
       <div className="text-xs px-1.5 py-0.5 rounded border truncate bg-orange-100 text-orange-800 border-orange-200">
-        ✓ {job.title}
+        {'✓ ' + job.title}
       </div>
     );
   }
-
   // ── Day Detail Panel ───────────────────────────────────────
-
+  // Called as DayDetailPanel() not <DayDetailPanel /> to avoid remount on parent re-render
   function DayDetailPanel() {
     if (!dayPanelDate) return null;
     const day = parseISO(dayPanelDate);
@@ -298,7 +273,6 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
     const dayCompletedJobs = getCompletedJobsForDay(day);
     const bh = bankHolidayMap.get(dayPanelDate);
     const isEmpty = dayEvents.length === 0 && dayTasks.length === 0 && dayHolidays.length === 0 && daySickness.length === 0 && dayCompletedJobs.length === 0 && !bh;
-
     return (
       <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
         <div className="absolute inset-0 bg-black/40" onClick={() => setDayPanelOpen(false)} />
@@ -310,7 +284,7 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
           <div className="overflow-y-auto flex-1 p-4 space-y-3">
             {bh && (
               <div className="rounded-lg bg-purple-50 border border-purple-100 px-3 py-2 text-sm text-purple-700 font-medium">
-                Bank Holiday: {bh}
+                {'Bank Holiday: ' + bh}
               </div>
             )}
             {dayHolidays.length > 0 && (
@@ -343,10 +317,10 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
               return (
                 <div
                   key={task.id}
-                  onClick={() => { setDayPanelOpen(false); router.push(`/tasks/${task.id}`); }}
+                  onClick={() => { setDayPanelOpen(false); router.push('/tasks/' + task.id); }}
                   className={cn('rounded-xl border p-3 cursor-pointer hover:opacity-90 transition-opacity', isDone ? 'bg-green-50 border-green-100' : 'bg-aas-blue border-aas-blue')}
                 >
-                  <p className={cn('font-medium text-sm', isDone ? 'text-green-800 line-through' : 'text-white')}>✓ {task.title}</p>
+                  <p className={cn('font-medium text-sm', isDone ? 'text-green-800 line-through' : 'text-white')}>{'✓ ' + task.title}</p>
                   {customer && <p className={cn('text-xs mt-0.5', isDone ? 'text-green-600' : 'text-white/80')}>{customer.company_name}</p>}
                 </div>
               );
@@ -372,9 +346,9 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
                 <p className="text-xs font-semibold text-orange-700 mb-1.5">Jobs completed</p>
                 {dayCompletedJobs.map(j => (
                   <div key={j.id} className="text-sm text-orange-800 py-0.5">
-                    ✓ {j.title}
-                    <span className="text-xs text-orange-600 ml-1">— {getStaffName(j.completed_by)}</span>
-                    {j.completion_notes && <p className="text-xs text-orange-600 italic mt-0.5">"{j.completion_notes}"</p>}
+                    {'✓ ' + j.title}
+                    <span className="text-xs text-orange-600 ml-1">{'— ' + getStaffName(j.completed_by)}</span>
+                    {j.completion_notes && <p className="text-xs text-orange-600 italic mt-0.5">{'"' + j.completion_notes + '"'}</p>}
                   </div>
                 ))}
               </div>
@@ -393,9 +367,7 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
       </div>
     );
   }
-
   // ── Month view ─────────────────────────────────────────────
-
   function MonthView() {
     const monthStart = startOfMonth(current);
     const monthEnd = endOfMonth(current);
@@ -403,7 +375,6 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
     const gridEnd = endOfWeek(monthEnd, { weekStartsOn: 1 });
     const days = eachDayOfInterval({ start: gridStart, end: gridEnd });
     const weekDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-
     return (
       <div className="flex-1 overflow-hidden flex flex-col">
         <div className="grid grid-cols-7 border-b border-gray-100">
@@ -445,7 +416,7 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
                   {dayTasks.slice(0, 1).map(t => <TaskChip key={t.id} task={t} />)}
                   {dayCompletedJobs.slice(0, 1).map(j => <CompletedJobChip key={j.id} job={j} />)}
                   {dayEvents.slice(0, Math.max(0, 2 - dayTasks.length)).map(ev => <EventChip key={ev.id} event={ev} />)}
-                  {totalItems > 3 && <div className="text-[10px] text-gray-400">+{totalItems - 3} more</div>}
+                  {totalItems > 3 && <div className="text-[10px] text-gray-400">{'+' + (totalItems - 3) + ' more'}</div>}
                 </div>
               </div>
             );
@@ -454,13 +425,10 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
       </div>
     );
   }
-
   // ── Week view ──────────────────────────────────────────────
-
   function WeekView() {
     const weekStart = startOfWeek(current, { weekStartsOn: 1 });
     const days = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
-
     return (
       <div className="flex-1 overflow-auto">
         <div className="grid grid-cols-7 min-w-[600px]">
@@ -502,14 +470,11 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
       </div>
     );
   }
-
   // ── Timeline view ──────────────────────────────────────────
-
   function TimelineView() {
     const staff = allStaff ?? [];
     const timelineStart = startOfWeek(current, { weekStartsOn: 1 });
     const days = Array.from({ length: 28 }, (_, i) => addDays(timelineStart, i));
-
     return (
       <div className="flex-1 overflow-auto">
         <div className="min-w-[800px]">
@@ -564,9 +529,7 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
       </div>
     );
   }
-
   // ── Day view ───────────────────────────────────────────────
-
   function DayView() {
     const dayStr = format(current, 'yyyy-MM-dd');
     const dayEvents = getEventsForDay(current);
@@ -576,12 +539,11 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
     const dayCompletedJobs = getCompletedJobsForDay(current);
     const bh = bankHolidayMap.get(dayStr);
     const hasItems = dayEvents.length > 0 || dayTasks.length > 0 || dayHolidays.length > 0 || daySickness.length > 0 || dayCompletedJobs.length > 0;
-
     return (
       <div className="flex-1 overflow-auto p-4 space-y-3">
         {bh && (
           <div className="rounded-lg bg-purple-50 border border-purple-100 px-4 py-2 text-sm text-purple-700 font-medium">
-            Bank Holiday: {bh}
+            {'Bank Holiday: ' + bh}
           </div>
         )}
         {dayHolidays.length > 0 && (
@@ -614,12 +576,12 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
           return (
             <div
               key={task.id}
-              onClick={() => router.push(`/tasks/${task.id}`)}
+              onClick={() => router.push('/tasks/' + task.id)}
               className={cn('rounded-xl border p-4 cursor-pointer hover:opacity-90 transition-opacity', isDone ? 'bg-green-50 border-green-100' : 'bg-aas-blue border-aas-blue')}
             >
               <div className="flex items-start justify-between gap-2">
                 <div>
-                  <p className={cn('font-medium text-sm', isDone ? 'text-green-800 line-through' : 'text-white')}>✓ {task.title}</p>
+                  <p className={cn('font-medium text-sm', isDone ? 'text-green-800 line-through' : 'text-white')}>{'✓ ' + task.title}</p>
                   {customer && <p className={cn('text-xs mt-0.5', isDone ? 'text-green-600' : 'text-white/80')}>{customer.company_name}</p>}
                 </div>
                 <span className={cn('text-xs shrink-0 px-2 py-0.5 rounded-full font-medium', isDone ? 'bg-green-200 text-green-800' : 'bg-white/20 text-white')}>
@@ -656,8 +618,8 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
             <p className="text-xs font-semibold text-orange-700 mb-1.5">Jobs completed today</p>
             {dayCompletedJobs.map(j => (
               <div key={j.id} className="py-0.5">
-                <p className="text-sm text-orange-800">✓ {j.title} <span className="text-xs text-orange-600">— {getStaffName(j.completed_by)}</span></p>
-                {j.completion_notes && <p className="text-xs text-orange-600 italic">"{j.completion_notes}"</p>}
+                <p className="text-sm text-orange-800">{'✓ ' + j.title + ' '}<span className="text-xs text-orange-600">{'— ' + getStaffName(j.completed_by)}</span></p>
+                {j.completion_notes && <p className="text-xs text-orange-600 italic">{'"' + j.completion_notes + '"'}</p>}
               </div>
             ))}
           </div>
@@ -674,15 +636,15 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
       </div>
     );
   }
-
   // ── Add Event Modal ────────────────────────────────────────
-
+  // Called as AddEventModal() not <AddEventModal /> to avoid remount on parent re-render,
+  // which was causing the notes textarea to lose focus on every keystroke.
   function AddEventModal() {
     const inputClass = 'w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-aas-blue';
     const showCustomerLocation = ['customer_visit', 'farm_work', 'site_work', 'meeting', 'general_work'].includes(eventType);
-    const isTaskOrHoliday = eventType === 'task' || eventType === 'holiday';
+    const isTaskType = eventType === 'task';
+    const isHolidayType = eventType === 'holiday';
     const isSicknessType = eventType === 'sickness';
-
     return (
       <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
         <div className="absolute inset-0 bg-black/40" onClick={() => setModalOpen(false)} />
@@ -718,27 +680,46 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
                 </select>
               </div>
             )}
-            {!['holiday', 'sickness', 'office', 'home_working', 'travel'].includes(eventType) && (
+            {!isHolidayType && !isSicknessType && !['office', 'home_working', 'travel'].includes(eventType) && (
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Title {isTaskOrHoliday ? '*' : '(optional)'}</label>
-                <input value={title} onChange={e => setTitle(e.target.value)} placeholder={eventType === 'task' ? 'What needs doing?' : 'Add a title…'} className={inputClass} />
+                <label className="block text-sm font-medium text-gray-700 mb-1">{'Title' + (isTaskType ? ' *' : ' (optional)')}</label>
+                <input value={title} onChange={e => setTitle(e.target.value)} placeholder={isTaskType ? 'What needs doing?' : 'Add a title…'} className={inputClass} />
               </div>
             )}
             {!isSicknessType && (
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">{['holiday', 'sickness'].includes(eventType) ? 'From' : 'Date'}</label>
-                  <input type="date" value={modalDate} onChange={e => { setModalDate(e.target.value); if (!endDate || endDate < e.target.value) setEndDate(e.target.value); }} className={inputClass} />
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    {isHolidayType ? 'From' : 'Date'}
+                  </label>
+                  <input
+                    type="date"
+                    value={modalDate}
+                    onChange={e => {
+                      setModalDate(e.target.value);
+                      if (!endDate || endDate < e.target.value) setEndDate(e.target.value);
+                    }}
+                    className={inputClass}
+                  />
                 </div>
-                {['holiday'].includes(eventType) && (
+                {/* FIX: show end date for all event types except task */}
+                {!isTaskType && (
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">To</label>
-                    <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} min={modalDate} className={inputClass} />
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      {isHolidayType ? 'To' : 'End date'}
+                    </label>
+                    <input
+                      type="date"
+                      value={endDate}
+                      onChange={e => setEndDate(e.target.value)}
+                      min={modalDate}
+                      className={inputClass}
+                    />
                   </div>
                 )}
               </div>
             )}
-            {!isTaskOrHoliday && !isSicknessType && (
+            {!isTaskType && !isHolidayType && !isSicknessType && (
               <>
                 <label className="flex items-center gap-2 cursor-pointer select-none">
                   <input type="checkbox" checked={allDay} onChange={e => setAllDay(e.target.checked)} className="rounded" />
@@ -763,47 +744,45 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Customer</label>
                   <select value={customerId} onChange={e => setCustomerId(e.target.value)} className={inputClass}>
-                    <option value="">— none —</option>
+                    <option value="">{'— none —'}</option>
                     {customers.map(c => <option key={c.id} value={c.id}>{c.company_name}</option>)}
                   </select>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Location</label>
                   <select value={locationId} onChange={e => setLocationId(e.target.value)} className={inputClass}>
-                    <option value="">— none —</option>
+                    <option value="">{'— none —'}</option>
                     {locations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
                   </select>
                 </div>
               </div>
             )}
-            {!isTaskOrHoliday && !isSicknessType && (
+            {!isTaskType && !isHolidayType && !isSicknessType && (
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
-                <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2} className={`${inputClass} resize-none`} />
+                <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2} className={inputClass + ' resize-none'} />
               </div>
             )}
-            {eventType === 'task' && <div className="rounded-lg bg-aas-blue-pale border border-aas-blue/20 px-3 py-2 text-xs text-aas-blue">You'll be taken to the task form with the date pre-filled.</div>}
-            {eventType === 'holiday' && <div className="rounded-lg bg-green-50 border border-green-100 px-3 py-2 text-xs text-green-700">You'll be taken to the holiday request form with the dates pre-filled.</div>}
-            {isSicknessType && <div className="rounded-lg bg-red-50 border border-red-100 px-3 py-2 text-xs text-red-700">You'll be taken to the sickness page to log the absence.</div>}
+            {isTaskType && <div className="rounded-lg bg-aas-blue-pale border border-aas-blue/20 px-3 py-2 text-xs text-aas-blue">{"You'll be taken to the task form with the date pre-filled."}</div>}
+            {isHolidayType && <div className="rounded-lg bg-green-50 border border-green-100 px-3 py-2 text-xs text-green-700">{"You'll be taken to the holiday request form with the dates pre-filled."}</div>}
+            {isSicknessType && <div className="rounded-lg bg-red-50 border border-red-100 px-3 py-2 text-xs text-red-700">{"You'll be taken to the sickness page to log the absence."}</div>}
           </div>
           <div className="flex gap-3 p-4 border-t border-gray-100 shrink-0">
             <button type="button" onClick={() => setModalOpen(false)} className="flex-1 py-2.5 border border-gray-200 rounded-lg text-sm text-gray-600">Cancel</button>
             <button type="button" onClick={handleSave} disabled={saving} className="flex-1 py-2.5 bg-aas-blue text-white rounded-lg text-sm font-medium disabled:opacity-60">
-              {saving ? 'Saving…' : isSicknessType ? 'Go to sickness →' : eventType === 'task' ? 'Go to task form →' : eventType === 'holiday' ? 'Go to holiday form →' : 'Save'}
+              {saving ? 'Saving…' : isSicknessType ? 'Go to sickness →' : isTaskType ? 'Go to task form →' : isHolidayType ? 'Go to holiday form →' : 'Save'}
             </button>
           </div>
         </div>
       </div>
     );
   }
-
   const titleFormats: Record<CalView, string> = {
     day: 'EEEE d MMMM yyyy',
     week: "'Week of' d MMM yyyy",
     month: 'MMMM yyyy',
     timeline: "'4 weeks from' d MMM",
   };
-
   return (
     <div className="flex flex-col h-full">
       {/* Toolbar */}
@@ -833,7 +812,6 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
           Add event
         </button>
       </div>
-
       {/* Legend */}
       <div className="px-4 py-2 border-b border-gray-50 flex gap-3 overflow-x-auto shrink-0">
         <div className="flex items-center gap-1 shrink-0">
@@ -859,7 +837,6 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
           </div>
         ))}
       </div>
-
       {/* Content */}
       {loading ? (
         <div className="flex-1 flex items-center justify-center">
@@ -867,15 +844,15 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
         </div>
       ) : (
         <>
-          {view === 'month' && <MonthView />}
-          {view === 'week' && <WeekView />}
-          {view === 'day' && <DayView />}
-          {view === 'timeline' && <TimelineView />}
+          {view === 'month' && MonthView()}
+          {view === 'week' && WeekView()}
+          {view === 'day' && DayView()}
+          {view === 'timeline' && TimelineView()}
         </>
       )}
-
-      {dayPanelOpen && <DayDetailPanel />}
-      {modalOpen && <AddEventModal />}
+      {/* FIX: call as functions not components to prevent remount on state change */}
+      {dayPanelOpen && DayDetailPanel()}
+      {modalOpen && AddEventModal()}
     </div>
   );
 }
