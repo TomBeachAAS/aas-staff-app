@@ -13,9 +13,12 @@ const ROLES = [
 ];
 
 const DAYS = [
-  { key: 'mon', label: 'Mon' }, { key: 'tue', label: 'Tue' },
-  { key: 'wed', label: 'Wed' }, { key: 'thu', label: 'Thu' },
-  { key: 'fri', label: 'Fri' }, { key: 'sat', label: 'Sat' },
+  { key: 'mon', label: 'Mon' },
+  { key: 'tue', label: 'Tue' },
+  { key: 'wed', label: 'Wed' },
+  { key: 'thu', label: 'Thu' },
+  { key: 'fri', label: 'Fri' },
+  { key: 'sat', label: 'Sat' },
   { key: 'sun', label: 'Sun' },
 ];
 
@@ -46,17 +49,21 @@ export default function NewStaffPage() {
       )}
 
       <form action={action} className="space-y-5">
+
         <div className="bg-white rounded-xl border border-gray-100 p-4 space-y-4">
           <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Personal details</p>
+
           <div>
             <label className={labelCls}>Full name *</label>
             <input name="full_name" required placeholder="e.g. Jane Smith" className={inputCls} />
           </div>
+
           <div>
             <label className={labelCls}>Email address *</label>
             <input name="email" type="email" required placeholder="jane@example.com" className={inputCls} />
             <p className="text-xs text-gray-400 mt-1">An invite email will be sent so they can set their password.</p>
           </div>
+
           <div>
             <label className={labelCls}>Phone</label>
             <input name="phone" type="tel" placeholder="+44 7700 900000" className={inputCls} />
@@ -65,20 +72,24 @@ export default function NewStaffPage() {
 
         <div className="bg-white rounded-xl border border-gray-100 p-4 space-y-4">
           <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Role & position</p>
+
           <div>
             <label className={labelCls}>Role *</label>
             <select name="role" required defaultValue="employee" className={inputCls}>
               {ROLES.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
             </select>
           </div>
+
           <div>
             <label className={labelCls}>Job title</label>
             <input name="job_title" placeholder="e.g. Field Technician" className={inputCls} />
           </div>
+
           <div>
             <label className={labelCls}>Department</label>
             <input name="department" placeholder="e.g. Operations" className={inputCls} />
           </div>
+
           <div>
             <label className={labelCls}>Start date</label>
             <input name="start_date" type="date" className={inputCls} />
@@ -87,19 +98,27 @@ export default function NewStaffPage() {
 
         <div className="bg-white rounded-xl border border-gray-100 p-4 space-y-4">
           <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Working pattern</p>
+
           <div>
             <label className={labelCls}>Working days</label>
             <div className="flex gap-1.5 flex-wrap">
               {DAYS.map(({ key, label }) => (
-                <button key={key} type="button" onClick={() => toggleDay(key)}
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => toggleDay(key)}
                   className={'px-3 py-1.5 rounded-full text-xs font-medium transition-colors ' +
-                    (activeDays[key] ? 'bg-aas-blue text-white' : 'bg-gray-100 text-gray-400')}>
+                    (activeDays[key] ? 'bg-aas-blue text-white' : 'bg-gray-100 text-gray-400')}
+                >
                   {label}
                 </button>
               ))}
             </div>
-            {DAYS.map(({ key }) => activeDays[key] ? <input key={key} type="hidden" name={'day_' + key} value="on" /> : null)}
+            {DAYS.map(({ key }) => (
+              activeDays[key] ? <input key={key} type="hidden" name={'day_' + key} value="on" /> : null
+            ))}
           </div>
+
           <div>
             <label className={labelCls}>Weekly hours</label>
             <input name="weekly_hours" type="number" step="0.5" min="1" max="84" defaultValue="40" className={inputCls} />
@@ -108,10 +127,12 @@ export default function NewStaffPage() {
 
         <div className="bg-white rounded-xl border border-gray-100 p-4 space-y-4">
           <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Leave & access</p>
+
           <div>
             <label className={labelCls}>Holiday allowance (days per year)</label>
             <input name="holiday_allowance" type="number" min="0" max="365" defaultValue="28" className={inputCls} />
           </div>
+
           <div className="space-y-3">
             <label className="flex items-center gap-3 cursor-pointer">
               <input name="timesheet_access" type="checkbox" defaultChecked className="w-4 h-4 rounded text-aas-blue" />
@@ -130,9 +151,14 @@ export default function NewStaffPage() {
           </div>
         </div>
 
-        <button type="submit" disabled={pending} className="w-full py-3 bg-aas-blue text-white rounded-xl text-sm font-semibold disabled:opacity-60">
-          {pending ? 'Creating account & sending invite…' : 'Create staff member & send invite'}
+        <button
+          type="submit"
+          disabled={pending}
+          className="w-full py-3 bg-aas-blue text-white rounded-xl text-sm font-semibold disabled:opacity-60"
+        >
+          {pending ? 'Creating account & sending invite...' : 'Create staff member & send invite'}
         </button>
+
       </form>
     </div>
   );
