@@ -51,11 +51,9 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
   const [loading, setLoading] = useState(true);
   const isManagerOrAdmin = ['administrator', 'manager'].includes(profile.role);
 
-  // Day panel
   const [dayPanelOpen, setDayPanelOpen] = useState(false);
   const [dayPanelDate, setDayPanelDate] = useState<string | null>(null);
 
-  // Modal (create + edit)
   const [modalOpen, setModalOpen] = useState(false);
   const [editingEvent, setEditingEvent] = useState<CalendarEvent | null>(null);
   const [modalDate, setModalDate] = useState(format(new Date(), 'yyyy-MM-dd'));
@@ -90,7 +88,6 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
     const rangeStart = startStr + 'T00:00:00';
     const rangeEnd = endStr + 'T23:59:59';
 
-    // Fetch all events — visibility filtering happens below for staff
     const eventsQuery = supabase
       .from('calendar_events')
       .select('*, customer:customers(company_name), location:locations(name), visibility, visible_to')
@@ -214,7 +211,6 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
     setModalOpen(true);
   }
 
-  // Owner can always edit; managers can edit anyone's; staff can only edit their own
   function canEdit(ev: CalendarEvent) {
     return isManagerOrAdmin || ev.user_id === currentUserId;
   }
@@ -313,7 +309,7 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
         className={cn('text-xs px-1.5 py-0.5 rounded border truncate', colour, editable && 'cursor-pointer hover:opacity-75')}
         title={editable ? 'Click to edit' : undefined}
       >
-        {isManagerOrAdmin ? (getStaffName(event.user_id).split(' ')[0] + ': ') : ''}{label}
+        {event.user_id !== currentUserId ? (getStaffName(event.user_id).split(' ')[0] + ': ') : ''}{label}
       </div>
     );
   }
@@ -427,7 +423,9 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
                 <div key={ev.id} className={cn('rounded-xl border p-3', colour)}>
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex-1 min-w-0">
-                      {isManagerOrAdmin && <p className="text-xs font-semibold mb-0.5">{getStaffName(ev.user_id)}</p>}
+                      {ev.user_id !== currentUserId && (
+                        <p className="text-xs font-semibold mb-0.5">{getStaffName(ev.user_id)}</p>
+                      )}
                       <p className="font-medium text-sm">{ev.title ?? CALENDAR_EVENT_LABELS[ev.event_type]}</p>
                       {customer && <p className="text-xs mt-0.5">{(customer as any).company_name}</p>}
                       {location && <p className="text-xs">{(location as any).name}</p>}
@@ -710,7 +708,9 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
             <div key={ev.id} className={cn('rounded-xl border p-4', colour)}>
               <div className="flex items-start justify-between gap-2">
                 <div className="flex-1 min-w-0">
-                  {isManagerOrAdmin && <p className="text-xs font-semibold mb-1">{getStaffName(ev.user_id)}</p>}
+                  {ev.user_id !== currentUserId && (
+                    <p className="text-xs font-semibold mb-1">{getStaffName(ev.user_id)}</p>
+                  )}
                   <p className="font-medium text-sm">{ev.title ?? CALENDAR_EVENT_LABELS[ev.event_type]}</p>
                   {customer && <p className="text-xs mt-0.5">{(customer as any).company_name}</p>}
                   {location && <p className="text-xs">{(location as any).name}</p>}
@@ -789,7 +789,6 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
           </div>
           <div className="overflow-y-auto flex-1 p-4 space-y-4">
             {modalError && <div className="p-3 rounded-lg bg-red-50 text-sm text-red-700">{modalError}</div>}
-            {/* Event type */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Type</label>
               <div className="flex flex-wrap gap-1.5">
@@ -805,7 +804,6 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
                 ))}
               </div>
             </div>
-            {/* For (manager only) */}
             {isManagerOrAdmin && allStaff && allStaff.length > 0 && !isSicknessType && (
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">For</label>
@@ -816,14 +814,12 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
                 </select>
               </div>
             )}
-            {/* Title */}
             {!isHolidayType && !isSicknessType && !['office', 'home_working', 'travel'].includes(eventType) && (
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">{'Title' + (isTaskType ? ' *' : ' (optional)')}</label>
                 <input value={title} onChange={e => setTitle(e.target.value)} placeholder={isTaskType ? 'What needs doing?' : 'Add a title…'} className={inputClass} />
               </div>
             )}
-            {/* Dates */}
             {!isSicknessType && (
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -856,7 +852,6 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
                 )}
               </div>
             )}
-            {/* Time */}
             {!isTaskType && !isHolidayType && !isSicknessType && (
               <>
                 <label className="flex items-center gap-2 cursor-pointer select-none">
@@ -877,7 +872,6 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
                 )}
               </>
             )}
-            {/* Customer / Location */}
             {showCustomerLocation && (
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -896,14 +890,12 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
                 </div>
               </div>
             )}
-            {/* Notes */}
             {!isTaskType && !isHolidayType && !isSicknessType && (
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
                 <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2} className={inputClass + ' resize-none'} />
               </div>
             )}
-            {/* Visibility — hide for redirect types */}
             {!isRedirectType && (
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Visible to</label>
@@ -925,7 +917,6 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
                     </button>
                   ))}
                 </div>
-                {/* Custom picker */}
                 {visibility === 'custom' && allStaff && (
                   <div className="mt-2 border border-gray-200 rounded-lg p-2 max-h-36 overflow-y-auto space-y-1">
                     {allStaff.filter(s => s.id !== targetUserId).map(s => (
@@ -950,7 +941,6 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
                 )}
               </div>
             )}
-            {/* Hint banners */}
             {isTaskType && !isEditing && <div className="rounded-lg bg-aas-blue-pale border border-aas-blue/20 px-3 py-2 text-xs text-aas-blue">{"You'll be taken to the task form with the date pre-filled."}</div>}
             {isHolidayType && !isEditing && <div className="rounded-lg bg-green-50 border border-green-100 px-3 py-2 text-xs text-green-700">{"You'll be taken to the holiday request form with the dates pre-filled."}</div>}
             {isSicknessType && !isEditing && <div className="rounded-lg bg-red-50 border border-red-100 px-3 py-2 text-xs text-red-700">{"You'll be taken to the sickness page to log the absence."}</div>}
@@ -995,7 +985,6 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
 
   return (
     <div className="flex flex-col h-full">
-      {/* Toolbar */}
       <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-100 bg-white shrink-0 flex-wrap gap-y-2">
         <div className="flex rounded-lg border border-gray-200 overflow-hidden text-xs">
           {VIEWS.filter(v => v !== 'timeline' || isManagerOrAdmin).map(v => (
@@ -1022,7 +1011,6 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
           Add event
         </button>
       </div>
-      {/* Legend */}
       <div className="px-4 py-2 border-b border-gray-50 flex gap-3 overflow-x-auto shrink-0">
         <div className="flex items-center gap-1 shrink-0">
           <div className="w-2.5 h-2.5 rounded-sm border bg-green-100 border-green-200" />
@@ -1047,7 +1035,6 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
           </div>
         ))}
       </div>
-      {/* Content */}
       {loading ? (
         <div className="flex-1 flex items-center justify-center">
           <div className="w-6 h-6 border-2 border-aas-blue border-t-transparent rounded-full animate-spin" />
