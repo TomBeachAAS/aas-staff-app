@@ -3,7 +3,7 @@ import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { format } from 'date-fns';
 import { Plus } from 'lucide-react';
-import { Card, CardHeader, CardTitle } from '@/components/ui/Card';
+import { Card } from '@/components/ui/Card';
 import { ExpenseStatusBadge } from '@/components/ui/Badge';
 import { EXPENSE_CATEGORY_LABELS, cn } from '@/lib/utils';
 
@@ -27,7 +27,7 @@ export default async function ExpensesPage({
 
   let query = supabase
     .from('expenses')
-    .select('*, user:profiles(full_name)')
+    .select('*')
     .order('claim_date', { ascending: false })
     .limit(50);
 
@@ -40,6 +40,13 @@ export default async function ExpensesPage({
   }
 
   const { data: expenses } = await query;
+
+  // Fetch user names separately — avoids profiles RLS breaking the join
+  const userIds = [...new Set((expenses ?? []).map((e: any) => e.user_id))];
+  const { data: expenseProfiles } = userIds.length > 0
+    ? await supabase.from('profiles').select('id, full_name').in('id', userIds)
+    : { data: [] };
+  const profileMap = Object.fromEntries((expenseProfiles ?? []).map((p: any) => [p.id, p.full_name]));
 
   const { count: submittedCount } = isManagerOrAdmin
     ? await supabase.from('expenses').select('*', { count: 'exact', head: true }).eq('status', 'submitted')
@@ -71,7 +78,7 @@ export default async function ExpensesPage({
           ].map(({ key, label }) => (
             <Link
               key={key}
-              href={`/expenses?filter=${key}`}
+              href={'/expenses?filter=' + key}
               className={cn(
                 'flex-1 text-center py-1.5 rounded-md text-xs font-medium transition-colors',
                 filter === key ? 'bg-white text-aas-blue shadow-sm' : 'text-gray-500'
@@ -88,14 +95,14 @@ export default async function ExpensesPage({
           {(expenses ?? []).length === 0 ? (
             <div className="text-center py-10 text-sm text-gray-400">No expense claims</div>
           ) : (
-            (expenses ?? []).map(e => {
-              const user = e.user as {full_name: string} | undefined;
+            (expenses ?? []).map((e: any) => {
+              const ownerName = profileMap[e.user_id] ?? '';
               return (
-                <Link key={e.id} href={`/expenses/${e.id}`} className="block px-4 py-3 hover:bg-gray-50 transition-colors">
+                <Link key={e.id} href={'/expenses/' + e.id} className="block px-4 py-3 hover:bg-gray-50 transition-colors">
                   <div className="flex items-start justify-between gap-2">
                     <div>
-                      {isManagerOrAdmin && filter !== 'mine' && user && (
-                        <p className="text-xs font-semibold text-gray-500 mb-0.5">{user.full_name}</p>
+                      {isManagerOrAdmin && filter !== 'mine' && ownerName && (
+                        <p className="text-xs font-semibold text-gray-500 mb-0.5">{ownerName}</p>
                       )}
                       <p className="text-sm font-medium text-gray-800">{e.description}</p>
                       <p className="text-xs text-gray-400">
