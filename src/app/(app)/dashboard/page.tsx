@@ -90,6 +90,7 @@ export default async function DashboardPage() {
 
   return (
     <div className="p-4 space-y-4 max-w-4xl mx-auto">
+      {/* Greeting */}
       <div>
         <h2 className="text-lg font-bold text-gray-800">
           Good {getGreeting()}, {profile.full_name.split(' ')[0]}
@@ -97,11 +98,27 @@ export default async function DashboardPage() {
         <p className="text-sm text-gray-500">{format(new Date(), 'EEEE, d MMMM yyyy')}</p>
       </div>
 
+      {/* Robotti quick link */}
+      
+        href="https://robotti.agrointelli.com/"
+        target="_blank"
+        rel="noopener noreferrer"
+        className="flex items-center justify-between bg-green-700 hover:bg-green-800 transition-colors rounded-xl px-4 py-3"
+      >
+        <div>
+          <p className="text-white font-semibold text-sm">Robotti Dashboard</p>
+          <p className="text-green-200 text-xs">robotti.agrointelli.com</p>
+        </div>
+        <ExternalLink size={18} className="text-green-300 shrink-0" />
+      </a>
+
+      {/* Motivational message */}
       <MotivationalBanner />
 
+      {/* Weather */}
       <WeatherWidget />
 
-      {/* Manager overview */}
+      {/* Manager overview stats */}
       {isManagerOrAdmin && (
         <div className="grid grid-cols-2 gap-3">
           <StatCard label="Pending Approvals"  value={pendingApprovals ?? 0}  icon={Umbrella}    iconColor="text-amber-600"  iconBg="bg-amber-50"  />
@@ -119,7 +136,9 @@ export default async function DashboardPage() {
 
       {/* Today's schedule */}
       <Card>
-        <CardHeader><CardTitle>Today&apos;s schedule</CardTitle></CardHeader>
+        <CardHeader>
+          <CardTitle>Today&apos;s schedule</CardTitle>
+        </CardHeader>
         {(todayEvents ?? []).length === 0 ? (
           <CardContent>
             <p className="text-sm text-gray-400 text-center py-4">Nothing planned for today</p>
@@ -185,7 +204,7 @@ export default async function DashboardPage() {
         )}
 
         {(completedTasks ?? []).length > 0 && (
-          <div className={`px-4 pb-4 pt-3 ${todayTasks.length > 0 || overdueTasks.length > 0 ? 'border-t border-gray-50 mt-1' : ''}`}>
+          <div className={`px-4 pb-4 pt-3 ${(todayTasks.length > 0 || overdueTasks.length > 0) ? 'border-t border-gray-50 mt-1' : ''}`}>
             <p className="text-xs font-semibold text-green-600 uppercase tracking-wider mb-2">
               Completed last 7 days ({(completedTasks ?? []).length})
             </p>
@@ -208,7 +227,10 @@ export default async function DashboardPage() {
               href="/holidays?filter=pending"
               className="flex items-center justify-between text-sm text-aas-blue font-medium hover:underline"
             >
-              <span>Review {pendingApprovals} pending holiday {pendingApprovals === 1 ? 'request' : 'requests'}</span>
+              <span>
+                Review {pendingApprovals} pending holiday{' '}
+                {pendingApprovals === 1 ? 'request' : 'requests'}
+              </span>
               <span>→</span>
             </Link>
           </CardContent>
@@ -224,16 +246,3 @@ function getGreeting() {
   if (h < 17) return 'afternoon';
   return 'evening';
 }
-{/* Robotti quick link */}
-
-  href="https://robotti.agrointelli.com/"
-  target="_blank"
-  rel="noopener noreferrer"
-  className="flex items-center justify-between bg-green-700 hover:bg-green-800 transition-colors rounded-xl px-4 py-3"
->
-  <div>
-    <p className="text-white font-semibold text-sm">Robotti Dashboard</p>
-    <p className="text-green-200 text-xs">robotti.agrointelli.com</p>
-  </div>
-  <ExternalLink size={18} className="text-green-300 shrink-0" />
-</a>
