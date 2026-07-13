@@ -1,7 +1,7 @@
 'use client';
 
-import { useActionState, useState } from 'react';
-import { createStaffMember } from './actions';
+import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
 
@@ -26,13 +26,57 @@ const inputCls = 'w-full px-3 py-2 border border-gray-300 rounded-lg text-sm foc
 const labelCls = 'block text-sm font-medium text-gray-700 mb-1';
 
 export default function NewStaffPage() {
-  const [state, action, pending] = useActionState(createStaffMember, { error: '' });
+  const router = useRouter();
+  const [error, setError] = useState('');
+  const [pending, setPending] = useState(false);
   const [activeDays, setActiveDays] = useState<Record<string, boolean>>({
     mon: true, tue: true, wed: true, thu: true, fri: true, sat: false, sun: false,
   });
 
   function toggleDay(key: string) {
     setActiveDays(prev => ({ ...prev, [key]: !prev[key] }));
+  }
+
+  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setError('');
+    setPending(true);
+
+    const form = e.currentTarget;
+    const data = new FormData(form);
+
+    const body = {
+      email: (data.get('email') as string || '').trim().toLowerCase(),
+      full_name: (data.get('full_name') as string || '').trim(),
+      role: data.get('role') as string,
+      job_title: (data.get('job_title') as string || '').trim() || null,
+      department: (data.get('department') as string || '').trim() || null,
+      phone: (data.get('phone') as string || '').trim() || null,
+      start_date: data.get('start_date') as string || null,
+      holiday_allowance: parseInt(data.get('holiday_allowance') as string) || 28,
+      weekly_hours: parseFloat(data.get('weekly_hours') as string) || 40,
+      timesheet_access: (document.getElementById('timesheet_access') as HTMLInputElement)?.checked !== false,
+      expenses_access: (document.getElementById('expenses_access') as HTMLInputElement)?.checked !== false,
+      working_days: DAYS.filter(d => activeDays[d.key]).map(d => d.key),
+    };
+
+    try {
+      const res = await fetch('/api/staff/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        setError(json.error || 'Something went wrong.');
+      } else {
+        router.push('/staff');
+      }
+    } catch (err) {
+      setError('Network error. Please try again.');
+    } finally {
+      setPending(false);
+    }
   }
 
   return (
@@ -44,11 +88,11 @@ export default function NewStaffPage() {
         <h2 className="text-lg font-bold text-gray-800">Add staff member</h2>
       </div>
 
-      {state.error && (
-        <div className="p-3 rounded-lg bg-red-50 border border-red-100 text-sm text-red-700">{state.error}</div>
+      {error && (
+        <div className="p-3 rounded-lg bg-red-50 border border-red-100 text-sm text-red-700">{error}</div>
       )}
 
-      <form action={action} className="space-y-5">
+      <form onSubmit={handleSubmit} className="space-y-5">
 
         <div className="bg-white rounded-xl border border-gray-100 p-4 space-y-4">
           <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Personal details</p>
@@ -114,9 +158,6 @@ export default function NewStaffPage() {
                 </button>
               ))}
             </div>
-            {DAYS.map(({ key }) => (
-              activeDays[key] ? <input key={key} type="hidden" name={'day_' + key} value="on" /> : null
-            ))}
           </div>
 
           <div>
@@ -135,14 +176,14 @@ export default function NewStaffPage() {
 
           <div className="space-y-3">
             <label className="flex items-center gap-3 cursor-pointer">
-              <input name="timesheet_access" type="checkbox" defaultChecked className="w-4 h-4 rounded text-aas-blue" />
+              <input id="timesheet_access" type="checkbox" defaultChecked className="w-4 h-4 rounded text-aas-blue" />
               <div>
                 <p className="text-sm font-medium text-gray-700">Timesheet access</p>
                 <p className="text-xs text-gray-400">Can log and view timesheets</p>
               </div>
             </label>
             <label className="flex items-center gap-3 cursor-pointer">
-              <input name="expenses_access" type="checkbox" defaultChecked className="w-4 h-4 rounded text-aas-blue" />
+              <input id="expenses_access" type="checkbox" defaultChecked className="w-4 h-4 rounded text-aas-blue" />
               <div>
                 <p className="text-sm font-medium text-gray-700">Expenses access</p>
                 <p className="text-xs text-gray-400">Can submit expense and mileage claims</p>
