@@ -2,7 +2,7 @@ import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { format, subDays, startOfWeek } from 'date-fns';
-import { Umbrella, CheckSquare, AlertCircle, CalendarX, TrendingUp, Briefcase } from 'lucide-react';
+import { Umbrella, CheckSquare, AlertCircle, CalendarX, TrendingUp, Briefcase, ExternalLink } from 'lucide-react';
 import { StatCard } from '@/components/ui/StatCard';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { MotivationalBanner } from '@/components/dashboard/MotivationalBanner';
@@ -224,3 +224,16 @@ function getGreeting() {
   if (h < 17) return 'afternoon';
   return 'evening';
 }
+{/* Robotti quick link */}
+
+  href="https://robotti.agrointelli.com/"
+  target="_blank"
+  rel="noopener noreferrer"
+  className="flex items-center justify-between bg-green-700 hover:bg-green-800 transition-colors rounded-xl px-4 py-3"
+>
+  <div>
+    <p className="text-white font-semibold text-sm">Robotti Dashboard</p>
+    <p className="text-green-200 text-xs">robotti.agrointelli.com</p>
+  </div>
+  <ExternalLink size={18} className="text-green-300 shrink-0" />
+</a>
