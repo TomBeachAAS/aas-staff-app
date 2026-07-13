@@ -6,12 +6,14 @@ import {
   addDays, addMonths, addWeeks, subMonths, subWeeks,
   isSameMonth, isToday, parseISO, eachDayOfInterval
 } from 'date-fns';
-import { ChevronLeft, ChevronRight, Plus, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus, X, Pencil, Trash2 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { CALENDAR_EVENT_COLOURS, CALENDAR_EVENT_LABELS, cn } from '@/lib/utils';
 import type { CalendarEvent, BankHoliday, Profile } from '@/types/database';
+
 const VIEWS = ['day', 'week', 'month', 'timeline'] as const;
 type CalView = typeof VIEWS[number];
+
 interface Props {
   currentUserId: string;
   profile: Profile;
@@ -20,6 +22,7 @@ interface Props {
   allStaff: Pick<Profile, 'id' | 'full_name' | 'role'>[] | null;
   bankHolidays: BankHoliday[];
 }
+
 const MODAL_EVENT_TYPES = [
   { value: 'task',          label: 'Task',          pill: 'bg-aas-blue text-white border-aas-blue' },
   { value: 'holiday',       label: 'Annual Leave',  pill: 'bg-green-100 text-green-800 border-green-200' },
@@ -34,6 +37,7 @@ const MODAL_EVENT_TYPES = [
   { value: 'home_working',  label: 'Home Working',  pill: 'bg-purple-100 text-purple-800 border-purple-200' },
   { value: 'general_work',  label: 'General',       pill: 'bg-gray-100 text-gray-800 border-gray-200' },
 ];
+
 export function CalendarView({ currentUserId, profile, initialView, initialDate, allStaff, bankHolidays }: Props) {
   const router = useRouter();
   const [view, setView] = useState<CalView>(initialView);
@@ -45,9 +49,12 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
   const [completedJobs, setCompletedJobs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const isManagerOrAdmin = ['administrator', 'manager'].includes(profile.role);
+
   const [dayPanelOpen, setDayPanelOpen] = useState(false);
   const [dayPanelDate, setDayPanelDate] = useState<string | null>(null);
+
   const [modalOpen, setModalOpen] = useState(false);
+  const [editingEvent, setEditingEvent] = useState<CalendarEvent | null>(null);
   const [modalDate, setModalDate] = useState(format(new Date(), 'yyyy-MM-dd'));
   const [eventType, setEventType] = useState('general_work');
   const [title, setTitle] = useState('');
@@ -62,7 +69,9 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
   const [customerId, setCustomerId] = useState('');
   const [locationId, setLocationId] = useState('');
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [modalError, setModalError] = useState('');
+
   const loadEvents = useCallback(async () => {
     setLoading(true);
     const supabase = createClient();
@@ -73,12 +82,11 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
     else { start = startOfWeek(current, { weekStartsOn: 1 }); end = addDays(start, 27); }
     const startStr = format(start, 'yyyy-MM-dd');
     const endStr = format(end, 'yyyy-MM-dd');
-    // FIX: use overlap filter with proper date strings
     const rangeStart = startStr + 'T00:00:00';
     const rangeEnd = endStr + 'T23:59:59';
     let eventsQuery = supabase
       .from('calendar_events')
-      .select('*')
+      .select('*, customer:customers(company_name), location:locations(name)')
       .lte('start_datetime', rangeEnd)
       .gte('end_datetime', rangeStart)
       .order('start_datetime');
@@ -109,13 +117,13 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
       .or('end_date.is.null,end_date.gte.' + startStr);
     if (!isManagerOrAdmin) sicknessQuery = sicknessQuery.eq('user_id', currentUserId);
     const [
-  { data: eventsData, error: eventsError },
-  { data: tasksData },
-  { data: holidaysData },
-  { data: completedJobsData },
-  { data: sicknessData },
-] = await Promise.all([eventsQuery, tasksQuery, holidaysQuery, completedJobsQuery, sicknessQuery]);
-if (eventsError) console.error('calendar_events query failed:', eventsError);
+      { data: eventsData, error: eventsError },
+      { data: tasksData },
+      { data: holidaysData },
+      { data: completedJobsData },
+      { data: sicknessData },
+    ] = await Promise.all([eventsQuery, tasksQuery, holidaysQuery, completedJobsQuery, sicknessQuery]);
+    if (eventsError) console.error('calendar_events query failed:', eventsError);
     setEvents((eventsData as CalendarEvent[]) ?? []);
     setTasks(tasksData ?? []);
     setHolidays(holidaysData ?? []);
@@ -123,7 +131,9 @@ if (eventsError) console.error('calendar_events query failed:', eventsError);
     setSickness(sicknessData ?? []);
     setLoading(false);
   }, [view, current, currentUserId, isManagerOrAdmin]);
+
   useEffect(() => { loadEvents(); }, [loadEvents]);
+
   useEffect(() => {
     if (!modalOpen) return;
     const supabase = createClient();
@@ -135,11 +145,14 @@ if (eventsError) console.error('calendar_events query failed:', eventsError);
       setLocations(l ?? []);
     });
   }, [modalOpen]);
+
   function openDayPanel(dateStr: string) {
     setDayPanelDate(dateStr);
     setDayPanelOpen(true);
   }
+
   function openModal(dateStr: string) {
+    setEditingEvent(null);
     setModalDate(dateStr);
     setEndDate(dateStr);
     setEventType('general_work');
@@ -154,6 +167,28 @@ if (eventsError) console.error('calendar_events query failed:', eventsError);
     setModalError('');
     setModalOpen(true);
   }
+
+  function openEditModal(ev: CalendarEvent) {
+    setEditingEvent(ev);
+    setEventType(ev.event_type);
+    setTitle(ev.title ?? '');
+    setAllDay(ev.all_day);
+    setModalDate(ev.start_datetime.split('T')[0]);
+    setEndDate(ev.end_datetime.split('T')[0]);
+    setStartTime(ev.all_day ? '09:00' : ev.start_datetime.split('T')[1]?.slice(0, 5) ?? '09:00');
+    setEndTime(ev.all_day ? '17:00' : ev.end_datetime.split('T')[1]?.slice(0, 5) ?? '17:00');
+    setTargetUserId(ev.user_id);
+    setNotes(ev.notes ?? '');
+    setCustomerId((ev as any).customer_id ?? '');
+    setLocationId((ev as any).location_id ?? '');
+    setModalError('');
+    setModalOpen(true);
+  }
+
+  function canEdit(ev: CalendarEvent) {
+    return isManagerOrAdmin || ev.user_id === currentUserId;
+  }
+
   async function handleSave() {
     setModalError('');
     if (eventType === 'task') { setModalOpen(false); router.push('/tasks/new?date=' + modalDate); return; }
@@ -163,7 +198,7 @@ if (eventsError) console.error('calendar_events query failed:', eventsError);
     const supabase = createClient();
     const startDatetime = allDay ? (modalDate + 'T00:00:00') : (modalDate + 'T' + startTime + ':00');
     const endDatetime = allDay ? ((endDate || modalDate) + 'T23:59:59') : (modalDate + 'T' + endTime + ':00');
-    const { error } = await supabase.from('calendar_events').insert({
+    const payload = {
       user_id: targetUserId,
       event_type: eventType as any,
       title: title || null,
@@ -173,20 +208,40 @@ if (eventsError) console.error('calendar_events query failed:', eventsError);
       customer_id: customerId || null,
       location_id: locationId || null,
       notes: notes || null,
-      created_by: currentUserId,
-    });
+    };
+    let error;
+    if (editingEvent) {
+      ({ error } = await supabase.from('calendar_events').update(payload).eq('id', editingEvent.id));
+    } else {
+      ({ error } = await supabase.from('calendar_events').insert({ ...payload, created_by: currentUserId }));
+    }
     setSaving(false);
     if (error) { setModalError(error.message); return; }
     setModalOpen(false);
     loadEvents();
   }
+
+  async function handleDelete() {
+    if (!editingEvent) return;
+    if (!confirm('Delete this event? This cannot be undone.')) return;
+    setDeleting(true);
+    const supabase = createClient();
+    const { error } = await supabase.from('calendar_events').delete().eq('id', editingEvent.id);
+    setDeleting(false);
+    if (error) { setModalError(error.message); return; }
+    setModalOpen(false);
+    loadEvents();
+  }
+
   function navigate(dir: 1 | -1) {
     if (view === 'day') setCurrent(d => addDays(d, dir));
     else if (view === 'week') setCurrent(d => dir === 1 ? addWeeks(d, 1) : subWeeks(d, 1));
     else if (view === 'month') setCurrent(d => dir === 1 ? addMonths(d, 1) : subMonths(d, 1));
     else setCurrent(d => addDays(d, dir * 7 * 4));
   }
+
   const bankHolidayMap = new Map(bankHolidays.map(bh => [bh.date, bh.name]));
+
   function getEventsForDay(date: Date) {
     const dateStr = format(date, 'yyyy-MM-dd');
     return events.filter(e => {
@@ -214,14 +269,18 @@ if (eventsError) console.error('calendar_events query failed:', eventsError);
   function getStaffName(userId: string) {
     return allStaff?.find(s => s.id === userId)?.full_name ?? 'Staff';
   }
+
   // ── Chips ──────────────────────────────────────────────────
   function EventChip({ event }: { event: CalendarEvent }) {
     const colour = CALENDAR_EVENT_COLOURS[event.event_type] ?? 'bg-gray-100 text-gray-700';
     const label = event.title ?? CALENDAR_EVENT_LABELS[event.event_type] ?? event.event_type;
-    const user = event.user as Pick<Profile, 'full_name'> | undefined;
     return (
-      <div className={cn('text-xs px-1.5 py-0.5 rounded border truncate', colour)}>
-        {isManagerOrAdmin && user ? (user.full_name.split(' ')[0] + ': ') : ''}{label}
+      <div
+        onClick={e => { e.stopPropagation(); if (canEdit(event)) openEditModal(event); }}
+        className={cn('text-xs px-1.5 py-0.5 rounded border truncate', colour, canEdit(event) && 'cursor-pointer hover:opacity-75')}
+        title={canEdit(event) ? 'Click to edit' : undefined}
+      >
+        {isManagerOrAdmin ? (getStaffName(event.user_id).split(' ')[0] + ': ') : ''}{label}
       </div>
     );
   }
@@ -262,8 +321,8 @@ if (eventsError) console.error('calendar_events query failed:', eventsError);
       </div>
     );
   }
+
   // ── Day Detail Panel ───────────────────────────────────────
-  // Called as DayDetailPanel() not <DayDetailPanel /> to avoid remount on parent re-render
   function DayDetailPanel() {
     if (!dayPanelDate) return null;
     const day = parseISO(dayPanelDate);
@@ -328,17 +387,30 @@ if (eventsError) console.error('calendar_events query failed:', eventsError);
             })}
             {dayEvents.map(ev => {
               const colour = CALENDAR_EVENT_COLOURS[ev.event_type];
-              const user = ev.user as Pick<Profile, 'full_name'> | undefined;
               const customer = ev.customer as { company_name: string } | undefined;
               const location = ev.location as { name: string } | undefined;
+              const editable = canEdit(ev);
               return (
                 <div key={ev.id} className={cn('rounded-xl border p-3', colour)}>
-                  {isManagerOrAdmin && user && <p className="text-xs font-semibold mb-0.5">{user.full_name}</p>}
-                  <p className="font-medium text-sm">{ev.title ?? CALENDAR_EVENT_LABELS[ev.event_type]}</p>
-                  {customer && <p className="text-xs mt-0.5">{(customer as any).company_name}</p>}
-                  {location && <p className="text-xs">{(location as any).name}</p>}
-                  {ev.notes && <p className="text-xs mt-1 opacity-75">{ev.notes}</p>}
-                  <p className="text-xs opacity-50 mt-1">{ev.all_day ? 'All day' : format(parseISO(ev.start_datetime), 'HH:mm')}</p>
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex-1 min-w-0">
+                      {isManagerOrAdmin && <p className="text-xs font-semibold mb-0.5">{getStaffName(ev.user_id)}</p>}
+                      <p className="font-medium text-sm">{ev.title ?? CALENDAR_EVENT_LABELS[ev.event_type]}</p>
+                      {customer && <p className="text-xs mt-0.5">{(customer as any).company_name}</p>}
+                      {location && <p className="text-xs">{(location as any).name}</p>}
+                      {ev.notes && <p className="text-xs mt-1 opacity-75">{ev.notes}</p>}
+                      <p className="text-xs opacity-50 mt-1">{ev.all_day ? 'All day' : format(parseISO(ev.start_datetime), 'HH:mm')}</p>
+                    </div>
+                    {editable && (
+                      <button
+                        onClick={e => { e.stopPropagation(); setDayPanelOpen(false); openEditModal(ev); }}
+                        className="p-1.5 rounded-lg hover:bg-black/10 transition-colors shrink-0"
+                        title="Edit event"
+                      >
+                        <Pencil size={14} />
+                      </button>
+                    )}
+                  </div>
                 </div>
               );
             })}
@@ -368,6 +440,7 @@ if (eventsError) console.error('calendar_events query failed:', eventsError);
       </div>
     );
   }
+
   // ── Month view ─────────────────────────────────────────────
   function MonthView() {
     const monthStart = startOfMonth(current);
@@ -426,6 +499,7 @@ if (eventsError) console.error('calendar_events query failed:', eventsError);
       </div>
     );
   }
+
   // ── Week view ──────────────────────────────────────────────
   function WeekView() {
     const weekStart = startOfWeek(current, { weekStartsOn: 1 });
@@ -471,6 +545,7 @@ if (eventsError) console.error('calendar_events query failed:', eventsError);
       </div>
     );
   }
+
   // ── Timeline view ──────────────────────────────────────────
   function TimelineView() {
     const staff = allStaff ?? [];
@@ -530,6 +605,7 @@ if (eventsError) console.error('calendar_events query failed:', eventsError);
       </div>
     );
   }
+
   // ── Day view ───────────────────────────────────────────────
   function DayView() {
     const dayStr = format(current, 'yyyy-MM-dd');
@@ -594,22 +670,33 @@ if (eventsError) console.error('calendar_events query failed:', eventsError);
         })}
         {dayEvents.map(ev => {
           const colour = CALENDAR_EVENT_COLOURS[ev.event_type];
-          const user = ev.user as Pick<Profile, 'full_name'> | undefined;
           const customer = ev.customer as { company_name: string } | undefined;
           const location = ev.location as { name: string } | undefined;
+          const editable = canEdit(ev);
           return (
             <div key={ev.id} className={cn('rounded-xl border p-4', colour)}>
               <div className="flex items-start justify-between gap-2">
-                <div>
-                  {isManagerOrAdmin && user && <p className="text-xs font-semibold mb-1">{user.full_name}</p>}
+                <div className="flex-1 min-w-0">
+                  {isManagerOrAdmin && <p className="text-xs font-semibold mb-1">{getStaffName(ev.user_id)}</p>}
                   <p className="font-medium text-sm">{ev.title ?? CALENDAR_EVENT_LABELS[ev.event_type]}</p>
                   {customer && <p className="text-xs mt-0.5">{(customer as any).company_name}</p>}
                   {location && <p className="text-xs">{(location as any).name}</p>}
                   {ev.notes && <p className="text-xs mt-1 opacity-75">{ev.notes}</p>}
                 </div>
-                <span className="text-xs opacity-60 shrink-0">
-                  {ev.all_day ? 'All day' : format(parseISO(ev.start_datetime), 'HH:mm')}
-                </span>
+                <div className="flex items-center gap-2 shrink-0">
+                  <span className="text-xs opacity-60">
+                    {ev.all_day ? 'All day' : format(parseISO(ev.start_datetime), 'HH:mm')}
+                  </span>
+                  {editable && (
+                    <button
+                      onClick={() => openEditModal(ev)}
+                      className="p-1.5 rounded-lg hover:bg-black/10 transition-colors"
+                      title="Edit event"
+                    >
+                      <Pencil size={14} />
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
           );
@@ -637,21 +724,24 @@ if (eventsError) console.error('calendar_events query failed:', eventsError);
       </div>
     );
   }
-  // ── Add Event Modal ────────────────────────────────────────
-  // Called as AddEventModal() not <AddEventModal /> to avoid remount on parent re-render,
-  // which was causing the notes textarea to lose focus on every keystroke.
+
+  // ── Add / Edit Event Modal ─────────────────────────────────
   function AddEventModal() {
     const inputClass = 'w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-aas-blue';
     const showCustomerLocation = ['customer_visit', 'farm_work', 'site_work', 'meeting', 'general_work'].includes(eventType);
     const isTaskType = eventType === 'task';
     const isHolidayType = eventType === 'holiday';
     const isSicknessType = eventType === 'sickness';
+    const isEditing = !!editingEvent;
+    const availableTypes = isEditing
+      ? MODAL_EVENT_TYPES.filter(t => !['task', 'holiday', 'sickness'].includes(t.value))
+      : MODAL_EVENT_TYPES;
     return (
       <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
         <div className="absolute inset-0 bg-black/40" onClick={() => setModalOpen(false)} />
         <div className="relative w-full sm:max-w-md bg-white rounded-t-2xl sm:rounded-2xl shadow-xl flex flex-col max-h-[90vh]">
           <div className="flex items-center justify-between px-4 pt-4 pb-3 border-b border-gray-100 shrink-0">
-            <h3 className="text-base font-bold text-gray-800">Add event</h3>
+            <h3 className="text-base font-bold text-gray-800">{isEditing ? 'Edit event' : 'Add event'}</h3>
             <button onClick={() => setModalOpen(false)} className="p-1 rounded-lg hover:bg-gray-100"><X size={18} /></button>
           </div>
           <div className="overflow-y-auto flex-1 p-4 space-y-4">
@@ -659,7 +749,7 @@ if (eventsError) console.error('calendar_events query failed:', eventsError);
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Type</label>
               <div className="flex flex-wrap gap-1.5">
-                {MODAL_EVENT_TYPES.map(t => (
+                {availableTypes.map(t => (
                   <button
                     key={t.value}
                     type="button"
@@ -690,9 +780,7 @@ if (eventsError) console.error('calendar_events query failed:', eventsError);
             {!isSicknessType && (
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    {isHolidayType ? 'From' : 'Date'}
-                  </label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{isHolidayType ? 'From' : 'Date'}</label>
                   <input
                     type="date"
                     value={modalDate}
@@ -703,12 +791,9 @@ if (eventsError) console.error('calendar_events query failed:', eventsError);
                     className={inputClass}
                   />
                 </div>
-                {/* FIX: show end date for all event types except task */}
                 {!isTaskType && (
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      {isHolidayType ? 'To' : 'End date'}
-                    </label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">{isHolidayType ? 'To' : 'End date'}</label>
                     <input
                       type="date"
                       value={endDate}
@@ -764,29 +849,50 @@ if (eventsError) console.error('calendar_events query failed:', eventsError);
                 <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2} className={inputClass + ' resize-none'} />
               </div>
             )}
-            {isTaskType && <div className="rounded-lg bg-aas-blue-pale border border-aas-blue/20 px-3 py-2 text-xs text-aas-blue">{"You'll be taken to the task form with the date pre-filled."}</div>}
-            {isHolidayType && <div className="rounded-lg bg-green-50 border border-green-100 px-3 py-2 text-xs text-green-700">{"You'll be taken to the holiday request form with the dates pre-filled."}</div>}
-            {isSicknessType && <div className="rounded-lg bg-red-50 border border-red-100 px-3 py-2 text-xs text-red-700">{"You'll be taken to the sickness page to log the absence."}</div>}
+            {isTaskType && !isEditing && <div className="rounded-lg bg-aas-blue-pale border border-aas-blue/20 px-3 py-2 text-xs text-aas-blue">{"You'll be taken to the task form with the date pre-filled."}</div>}
+            {isHolidayType && !isEditing && <div className="rounded-lg bg-green-50 border border-green-100 px-3 py-2 text-xs text-green-700">{"You'll be taken to the holiday request form with the dates pre-filled."}</div>}
+            {isSicknessType && !isEditing && <div className="rounded-lg bg-red-50 border border-red-100 px-3 py-2 text-xs text-red-700">{"You'll be taken to the sickness page to log the absence."}</div>}
           </div>
           <div className="flex gap-3 p-4 border-t border-gray-100 shrink-0">
-            <button type="button" onClick={() => setModalOpen(false)} className="flex-1 py-2.5 border border-gray-200 rounded-lg text-sm text-gray-600">Cancel</button>
-            <button type="button" onClick={handleSave} disabled={saving} className="flex-1 py-2.5 bg-aas-blue text-white rounded-lg text-sm font-medium disabled:opacity-60">
-              {saving ? 'Saving…' : isSicknessType ? 'Go to sickness →' : isTaskType ? 'Go to task form →' : isHolidayType ? 'Go to holiday form →' : 'Save'}
-            </button>
+            {isEditing ? (
+              <>
+                <button
+                  type="button"
+                  onClick={handleDelete}
+                  disabled={deleting}
+                  className="flex items-center gap-1.5 px-4 py-2.5 border border-red-200 text-red-600 rounded-lg text-sm font-medium hover:bg-red-50 disabled:opacity-60 transition-colors"
+                >
+                  <Trash2 size={14} />
+                  {deleting ? 'Deleting…' : 'Delete'}
+                </button>
+                <button type="button" onClick={() => setModalOpen(false)} className="flex-1 py-2.5 border border-gray-200 rounded-lg text-sm text-gray-600">Cancel</button>
+                <button type="button" onClick={handleSave} disabled={saving} className="flex-1 py-2.5 bg-aas-blue text-white rounded-lg text-sm font-medium disabled:opacity-60">
+                  {saving ? 'Saving…' : 'Save'}
+                </button>
+              </>
+            ) : (
+              <>
+                <button type="button" onClick={() => setModalOpen(false)} className="flex-1 py-2.5 border border-gray-200 rounded-lg text-sm text-gray-600">Cancel</button>
+                <button type="button" onClick={handleSave} disabled={saving} className="flex-1 py-2.5 bg-aas-blue text-white rounded-lg text-sm font-medium disabled:opacity-60">
+                  {saving ? 'Saving…' : isSicknessType ? 'Go to sickness →' : isTaskType ? 'Go to task form →' : isHolidayType ? 'Go to holiday form →' : 'Save'}
+                </button>
+              </>
+            )}
           </div>
         </div>
       </div>
     );
   }
+
   const titleFormats: Record<CalView, string> = {
     day: 'EEEE d MMMM yyyy',
     week: "'Week of' d MMM yyyy",
     month: 'MMMM yyyy',
     timeline: "'4 weeks from' d MMM",
   };
+
   return (
     <div className="flex flex-col h-full">
-      {/* Toolbar */}
       <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-100 bg-white shrink-0 flex-wrap gap-y-2">
         <div className="flex rounded-lg border border-gray-200 overflow-hidden text-xs">
           {VIEWS.filter(v => v !== 'timeline' || isManagerOrAdmin).map(v => (
@@ -813,7 +919,6 @@ if (eventsError) console.error('calendar_events query failed:', eventsError);
           Add event
         </button>
       </div>
-      {/* Legend */}
       <div className="px-4 py-2 border-b border-gray-50 flex gap-3 overflow-x-auto shrink-0">
         <div className="flex items-center gap-1 shrink-0">
           <div className="w-2.5 h-2.5 rounded-sm border bg-green-100 border-green-200" />
@@ -838,7 +943,6 @@ if (eventsError) console.error('calendar_events query failed:', eventsError);
           </div>
         ))}
       </div>
-      {/* Content */}
       {loading ? (
         <div className="flex-1 flex items-center justify-center">
           <div className="w-6 h-6 border-2 border-aas-blue border-t-transparent rounded-full animate-spin" />
@@ -851,7 +955,6 @@ if (eventsError) console.error('calendar_events query failed:', eventsError);
           {view === 'timeline' && TimelineView()}
         </>
       )}
-      {/* FIX: call as functions not components to prevent remount on state change */}
       {dayPanelOpen && DayDetailPanel()}
       {modalOpen && AddEventModal()}
     </div>
