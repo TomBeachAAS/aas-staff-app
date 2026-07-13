@@ -33,7 +33,7 @@ export default function EditCustomerPage({ params }: { params: Promise<{ id: str
 
     const data = new FormData(e.currentTarget);
     const body = {
-      name: (data.get('name') as string || '').trim(),
+      company_name: (data.get('company_name') as string || '').trim(),
       contact_name: (data.get('contact_name') as string || '').trim(),
       email: (data.get('email') as string || '').trim(),
       phone: (data.get('phone') as string || '').trim(),
@@ -85,7 +85,7 @@ export default function EditCustomerPage({ params }: { params: Promise<{ id: str
           <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Company details</p>
           <div>
             <label className={labelCls}>Company / farm name *</label>
-            <input name="name" required defaultValue={customer.name} className={inputCls} />
+            <input name="company_name" required defaultValue={customer.company_name} className={inputCls} />
           </div>
           <div>
             <label className={labelCls}>Contact name</label>
@@ -119,12 +119,7 @@ export default function EditCustomerPage({ params }: { params: Promise<{ id: str
 
         <div className="bg-white rounded-xl border border-gray-100 p-4 space-y-4">
           <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Notes</p>
-          <textarea
-            name="notes"
-            defaultValue={customer.notes ?? ''}
-            rows={3}
-            className={inputCls}
-          />
+          <textarea name="notes" defaultValue={customer.notes ?? ''} rows={3} className={inputCls} />
         </div>
 
         <button
