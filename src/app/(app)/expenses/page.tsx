@@ -29,28 +29,41 @@ export default async function ExpensesPage({
     .from('expenses')
     .select('*')
     .order('claim_date', { ascending: false })
-    .limit(50);
+    .limit(100);
 
-  if (filter === 'mine' || !isManagerOrAdmin) {
+  if (!isManagerOrAdmin) {
+    // Staff always see only their own — enforced here and by RLS
     query = query.eq('user_id', user.id);
-  } else if (filter === 'submitted') {
-    query = query.eq('status', 'submitted');
-  } else if (filter === 'approved') {
-    query = query.eq('status', 'approved');
+  } else {
+    // Managers filter by tab
+    if (filter === 'mine') {
+      query = query.eq('user_id', user.id);
+    } else if (filter === 'pending') {
+      query = query.eq('status', 'submitted');
+    } else if (filter === 'approved') {
+      query = query.eq('status', 'approved');
+    }
+    // 'all' — no extra filter, returns everything
   }
 
   const { data: expenses } = await query;
 
-  // Fetch user names separately — avoids profiles RLS breaking the join
   const userIds = [...new Set((expenses ?? []).map((e: any) => e.user_id))];
   const { data: expenseProfiles } = userIds.length > 0
     ? await supabase.from('profiles').select('id, full_name').in('id', userIds)
     : { data: [] };
   const profileMap = Object.fromEntries((expenseProfiles ?? []).map((p: any) => [p.id, p.full_name]));
 
-  const { count: submittedCount } = isManagerOrAdmin
+  const { count: pendingCount } = isManagerOrAdmin
     ? await supabase.from('expenses').select('*', { count: 'exact', head: true }).eq('status', 'submitted')
     : { count: null };
+
+  const managerTabs = [
+    { key: 'mine',    label: 'Mine' },
+    { key: 'pending', label: 'Pending' },
+    { key: 'approved',label: 'Approved' },
+    { key: 'all',     label: 'All' },
+  ];
 
   return (
     <div className="p-4 space-y-4 max-w-3xl mx-auto">
@@ -62,20 +75,18 @@ export default async function ExpensesPage({
         </Link>
       </div>
 
-      {isManagerOrAdmin && (submittedCount ?? 0) > 0 && (
+      {isManagerOrAdmin && (pendingCount ?? 0) > 0 && (
         <div className="bg-amber-50 rounded-xl border border-amber-100 px-4 py-3 flex items-center justify-between">
-          <p className="text-sm text-amber-800 font-medium">{submittedCount} expense{submittedCount !== 1 ? 's' : ''} awaiting approval</p>
-          <Link href="/expenses?filter=submitted" className="text-xs text-amber-700 underline">Review</Link>
+          <p className="text-sm text-amber-800 font-medium">
+            {pendingCount} expense{pendingCount !== 1 ? 's' : ''} awaiting approval
+          </p>
+          <Link href="/expenses?filter=pending" className="text-xs text-amber-700 underline">Review</Link>
         </div>
       )}
 
       {isManagerOrAdmin && (
         <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
-          {[
-            { key: 'mine', label: 'Mine' },
-            { key: 'submitted', label: 'Submitted' },
-            { key: 'approved', label: 'Approved' },
-          ].map(({ key, label }) => (
+          {managerTabs.map(({ key, label }) => (
             <Link
               key={key}
               href={'/expenses?filter=' + key}
@@ -97,14 +108,15 @@ export default async function ExpensesPage({
           ) : (
             (expenses ?? []).map((e: any) => {
               const ownerName = profileMap[e.user_id] ?? '';
+              const showOwner = isManagerOrAdmin && filter !== 'mine' && ownerName && e.user_id !== user.id;
               return (
                 <Link key={e.id} href={'/expenses/' + e.id} className="block px-4 py-3 hover:bg-gray-50 transition-colors">
                   <div className="flex items-start justify-between gap-2">
-                    <div>
-                      {isManagerOrAdmin && filter !== 'mine' && ownerName && (
+                    <div className="min-w-0">
+                      {showOwner && (
                         <p className="text-xs font-semibold text-gray-500 mb-0.5">{ownerName}</p>
                       )}
-                      <p className="text-sm font-medium text-gray-800">{e.description}</p>
+                      <p className="text-sm font-medium text-gray-800 truncate">{e.description}</p>
                       <p className="text-xs text-gray-400">
                         {EXPENSE_CATEGORY_LABELS[e.category]} · {format(new Date(e.claim_date), 'd MMM yyyy')}
                       </p>
