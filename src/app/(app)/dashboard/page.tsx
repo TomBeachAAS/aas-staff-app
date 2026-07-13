@@ -110,7 +110,7 @@ export default async function DashboardPage() {
         </a>
         <a href="http://192.168.10.1:8888/" target="_blank" rel="noopener noreferrer" className="flex items-center justify-between bg-orange-600 hover:bg-orange-700 transition-colors rounded-xl px-4 py-3">
           <div>
-            <p className="text-white font-semibold text-sm">Tobotti Terminal</p>
+            <p className="text-white font-semibold text-sm">Robotti Terminal</p>
             <p className="text-orange-200 text-xs">192.168.10.1</p>
           </div>
           <ExternalLink size={16} className="text-orange-300 shrink-0" />
