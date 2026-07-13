@@ -21,7 +21,10 @@ interface Props {
   canEdit: boolean;
 }
 
-export function TimesheetWeek({ periodId, userId, currentUserId, days, entries, workingPattern, weekStartStr, prevWeek, nextWeek, isLocked, canEdit }: Props) {
+export function TimesheetWeek({
+  periodId, userId, currentUserId, days, entries,
+  workingPattern, weekStartStr, prevWeek, nextWeek, isLocked, canEdit,
+}: Props) {
   const router = useRouter();
 
   const [localEntries, setLocalEntries] = useState<Record<string, { start_time: string; end_time: string; notes: string }>>(() => {
@@ -36,8 +39,8 @@ export function TimesheetWeek({ periodId, userId, currentUserId, days, entries, 
     return map;
   });
 
-  // Track which days are auto-populated but not yet manually confirmed
-  const [autoDays, setAutoDays] = useState<Set<string>>(() => {
+  // Track auto-populated days (not yet manually confirmed)
+  const [autoDays] = useState<Set<string>>(() => {
     const set = new Set<string>();
     entries.forEach(e => {
       if ((e as any).is_auto_populated) set.add(e.work_date);
@@ -45,12 +48,13 @@ export function TimesheetWeek({ periodId, userId, currentUserId, days, entries, 
     return set;
   });
 
-  // Track which days have been edited since load
   const [dirtyDays, setDirtyDays] = useState<Set<string>>(new Set());
+  const [savedDays, setSavedDays] = useState<Set<string>>(new Set());
   const [saving, setSaving] = useState<string | null>(null);
-  const [saved, setSaved] = useState<Set<string>>(new Set());
 
-  const dayKeys: Record<number, keyof WorkingPattern> = { 1: 'mon', 2: 'tue', 3: 'wed', 4: 'thu', 5: 'fri', 6: 'sat', 0: 'sun' };
+  const dayKeys: Record<number, keyof WorkingPattern> = {
+    0: 'sun', 1: 'mon', 2: 'tue', 3: 'wed', 4: 'thu', 5: 'fri', 6: 'sat',
+  };
 
   function isWorkingDay(dateStr: string) {
     const dow = parseISO(dateStr).getDay();
@@ -91,9 +95,8 @@ export function TimesheetWeek({ periodId, userId, currentUserId, days, entries, 
         [field]: value,
       },
     }));
-    // Mark as dirty — no longer just auto
     setDirtyDays(prev => new Set([...prev, dateStr]));
-    setSaved(prev => { const n = new Set(prev); n.delete(dateStr); return n; });
+    setSavedDays(prev => { const n = new Set(prev); n.delete(dateStr); return n; });
   }
 
   async function saveEntry(dateStr: string) {
@@ -126,21 +129,23 @@ export function TimesheetWeek({ periodId, userId, currentUserId, days, entries, 
       });
     }
 
-    // Clear auto + dirty state, mark as saved
-    setAutoDays(prev => { const n = new Set(prev); n.delete(dateStr); return n; });
     setDirtyDays(prev => { const n = new Set(prev); n.delete(dateStr); return n; });
-    setSaved(prev => new Set([...prev, dateStr]));
+    setSavedDays(prev => new Set([...prev, dateStr]));
     setSaving(null);
 
-    // Flash the saved indicator then clear it
-    setTimeout(() => setSaved(prev => { const n = new Set(prev); n.delete(dateStr); return n; }), 2000);
+    setTimeout(() => {
+      setSavedDays(prev => { const n = new Set(prev); n.delete(dateStr); return n; });
+    }, 2500);
   }
 
   return (
     <div className="space-y-4">
       {/* Week navigation */}
       <div className="flex items-center justify-between bg-white rounded-xl border border-gray-100 px-4 py-3">
-        <button onClick={() => router.push(`/timesheets?week=${prevWeek}&user=${userId}`)} className="p-1.5 rounded-lg hover:bg-gray-100">
+        <button
+          onClick={() => router.push(`/timesheets?week=${prevWeek}&user=${userId}`)}
+          className="p-1.5 rounded-lg hover:bg-gray-100"
+        >
           <ChevronLeft size={16} />
         </button>
         <div className="text-center">
@@ -149,7 +154,10 @@ export function TimesheetWeek({ periodId, userId, currentUserId, days, entries, 
           </p>
           <p className="text-xs text-gray-400">{totalWeekHours()} total</p>
         </div>
-        <button onClick={() => router.push(`/timesheets?week=${nextWeek}&user=${userId}`)} className="p-1.5 rounded-lg hover:bg-gray-100">
+        <button
+          onClick={() => router.push(`/timesheets?week=${nextWeek}&user=${userId}`)}
+          className="p-1.5 rounded-lg hover:bg-gray-100"
+        >
           <ChevronRight size={16} />
         </button>
       </div>
@@ -161,16 +169,6 @@ export function TimesheetWeek({ periodId, userId, currentUserId, days, entries, 
         </div>
       )}
 
-      {/* Legend */}
-      <div className="flex items-center gap-4 text-xs text-gray-400 px-1">
-        <span className="flex items-center gap-1">
-          <span className="w-2 h-2 rounded-full bg-gray-300 inline-block" /> Auto-filled
-        </span>
-        <span className="flex items-center gap-1">
-          <span className="w-2 h-2 rounded-full bg-aas-blue inline-block" /> Confirmed
-        </span>
-      </div>
-
       {/* Day entries */}
       <div className="space-y-2">
         {days.map(dateStr => {
@@ -178,7 +176,7 @@ export function TimesheetWeek({ periodId, userId, currentUserId, days, entries, 
           const entry = localEntries[dateStr];
           const isAuto = autoDays.has(dateStr) && !dirtyDays.has(dateStr);
           const isDirty = dirtyDays.has(dateStr);
-          const isSaved = saved.has(dateStr);
+          const isSaved = savedDays.has(dateStr);
           const dow = format(parseISO(dateStr), 'EEE');
           const dayNum = format(parseISO(dateStr), 'd MMM');
           const hours = entry ? calcHours(entry.start_time, entry.end_time) : '—';
@@ -186,11 +184,12 @@ export function TimesheetWeek({ periodId, userId, currentUserId, days, entries, 
           return (
             <div
               key={dateStr}
-              className={`bg-white rounded-xl border p-3 transition-colors ${
-                !working ? 'opacity-40 border-gray-50' :
-                isAuto ? 'border-gray-200' :
-                isDirty ? 'border-amber-300 bg-amber-50/30' :
-                'border-gray-100'
+              className={`bg-white rounded-xl border p-3 ${
+                !working
+                  ? 'opacity-40 border-gray-100'
+                  : isDirty
+                  ? 'border-amber-300'
+                  : 'border-gray-100'
               }`}
             >
               <div className="flex items-center justify-between mb-2">
@@ -206,28 +205,29 @@ export function TimesheetWeek({ periodId, userId, currentUserId, days, entries, 
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="text-xs font-medium text-aas-blue">{hours}</span>
-                  {canEdit && working && (isAuto ? (
-                    // Auto entry: show a subtle "Confirm" button
-                    <button
-                      onClick={() => saveEntry(dateStr)}
-                      disabled={saving === dateStr}
-                      className="text-xs px-2.5 py-1 border border-gray-300 text-gray-500 rounded-md hover:border-aas-blue hover:text-aas-blue disabled:opacity-50 transition-colors"
-                    >
-                      {saving === dateStr ? '…' : 'Confirm'}
-                    </button>
-                  ) : isSaved ? (
-                    <span className="flex items-center gap-1 text-xs text-green-600">
-                      <Check size={12} /> Saved
-                    </span>
-                  ) : isDirty ? (
-                    <button
-                      onClick={() => saveEntry(dateStr)}
-                      disabled={saving === dateStr}
-                      className="text-xs px-2.5 py-1 bg-aas-blue text-white rounded-md disabled:opacity-50"
-                    >
-                      {saving === dateStr ? '…' : 'Save'}
-                    </button>
-                  ) : null)}
+                  {canEdit && working && (
+                    isSaved ? (
+                      <span className="flex items-center gap-1 text-xs text-green-600 font-medium">
+                        <Check size={12} /> Saved
+                      </span>
+                    ) : isDirty ? (
+                      <button
+                        onClick={() => saveEntry(dateStr)}
+                        disabled={saving === dateStr}
+                        className="text-xs px-2.5 py-1 bg-aas-blue text-white rounded-md disabled:opacity-50"
+                      >
+                        {saving === dateStr ? '…' : 'Save'}
+                      </button>
+                    ) : isAuto ? (
+                      <button
+                        onClick={() => saveEntry(dateStr)}
+                        disabled={saving === dateStr}
+                        className="text-xs px-2.5 py-1 border border-gray-300 text-gray-500 rounded-md hover:border-aas-blue hover:text-aas-blue disabled:opacity-50 transition-colors"
+                      >
+                        {saving === dateStr ? '…' : 'Confirm'}
+                      </button>
+                    ) : null
+                  )}
                 </div>
               </div>
 
