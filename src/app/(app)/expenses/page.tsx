@@ -6,7 +6,7 @@ import { Plus } from 'lucide-react';
 import { Card } from '@/components/ui/Card';
 import { ExpenseStatusBadge } from '@/components/ui/Badge';
 import { EXPENSE_CATEGORY_LABELS, cn } from '@/lib/utils';
-import { getEffectiveUserId } from '@/lib/effective-user';
+import { getEffectiveUser } from '@/lib/effective-user';
 
 export const dynamic = 'force-dynamic';
 
@@ -22,8 +22,7 @@ export default async function ExpensesPage({
   const { data: profile } = await supabase.from('profiles').select('*').eq('id', user.id).single();
   if (!profile?.expenses_access) redirect('/dashboard');
 
-  // Respect impersonation
-  const { effectiveUserId, effectiveRole } = await getEffectiveUserId(supabase, user.id, profile.role);
+  const { effectiveUserId, effectiveRole } = await getEffectiveUser(supabase, user.id, profile.role);
   const isManagerOrAdmin = ['administrator', 'manager'].includes(effectiveRole);
 
   const sp = await searchParams;
