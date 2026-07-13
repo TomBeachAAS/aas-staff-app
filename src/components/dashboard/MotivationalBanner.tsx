@@ -56,16 +56,16 @@ const MESSAGES = [
 ];
 
 const VIDEOS = [
-  'https://www.youtube.com/shorts/pDQLnJYJ5tQ',
-  'https://www.youtube.com/shorts/7Hb4W5TxNIE',
-  'https://www.youtube.com/shorts/ZXsQAXx_ao0',
-  'https://www.youtube.com/shorts/6vX5jAHrZ5Q',
-  'https://www.youtube.com/shorts/8ZNnHPsR0GE',
-  'https://www.youtube.com/shorts/IKJIHbgL-IE',
-  'https://www.youtube.com/shorts/MbCGC5TjmCk',
-  'https://www.youtube.com/shorts/fFDuDOamCec',
-  'https://www.youtube.com/shorts/oNQGZz0VCBU',
-  'https://youtu.be/mgmVOuLgFB0',
+  'https://www.youtube.com/watch?v=ZXsQAXx_ao0', // Shia LaBeouf — Just Do It
+  'https://www.youtube.com/watch?v=lsSC2vx7zFQ', // Eric Thomas — How Bad Do You Want It
+  'https://www.youtube.com/watch?v=pxBQLFLei70', // Admiral McRaven — Make Your Bed
+  'https://www.youtube.com/watch?v=D_Vg4uyYwEk', // Rocky Balboa — speech to his son
+  'https://www.youtube.com/watch?v=u_ktRTWMX3M', // Arnold Schwarzenegger — 6 Rules of Success
+  'https://www.youtube.com/watch?v=ka4BQRXhASs', // Les Brown — Live Your Dreams
+  'https://www.youtube.com/watch?v=mgmVOuLgFB0', // Shia LaBeouf — JUST DO IT (original)
+  'https://www.youtube.com/watch?v=7Hb4W5TxNIE', // Eric Thomas — Secrets to Success
+  'https://www.youtube.com/watch?v=IOt_pd7SCNU', // Goggins — Can't Hurt Me
+  'https://www.youtube.com/watch?v=6vuetQSwFW8', // Denzel Washington — Fall Forward
 ];
 
 function randomVideo() {
