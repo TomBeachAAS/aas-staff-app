@@ -13,6 +13,7 @@ import type { CalendarEvent, BankHoliday, Profile } from '@/types/database';
 
 const VIEWS = ['day', 'week', 'month', 'timeline'] as const;
 type CalView = typeof VIEWS[number];
+type Visibility = 'all' | 'personal' | 'custom';
 
 interface Props {
   currentUserId: string;
@@ -50,9 +51,11 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
   const [loading, setLoading] = useState(true);
   const isManagerOrAdmin = ['administrator', 'manager'].includes(profile.role);
 
+  // Day panel
   const [dayPanelOpen, setDayPanelOpen] = useState(false);
   const [dayPanelDate, setDayPanelDate] = useState<string | null>(null);
 
+  // Modal (create + edit)
   const [modalOpen, setModalOpen] = useState(false);
   const [editingEvent, setEditingEvent] = useState<CalendarEvent | null>(null);
   const [modalDate, setModalDate] = useState(format(new Date(), 'yyyy-MM-dd'));
@@ -68,6 +71,8 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
   const [locations, setLocations] = useState<{ id: string; name: string }[]>([]);
   const [customerId, setCustomerId] = useState('');
   const [locationId, setLocationId] = useState('');
+  const [visibility, setVisibility] = useState<Visibility>('all');
+  const [visibleTo, setVisibleTo] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [modalError, setModalError] = useState('');
@@ -84,13 +89,15 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
     const endStr = format(end, 'yyyy-MM-dd');
     const rangeStart = startStr + 'T00:00:00';
     const rangeEnd = endStr + 'T23:59:59';
-    let eventsQuery = supabase
+
+    // Fetch all events — visibility filtering happens below for staff
+    const eventsQuery = supabase
       .from('calendar_events')
-      .select('*, customer:customers(company_name), location:locations(name)')
+      .select('*, customer:customers(company_name), location:locations(name), visibility, visible_to')
       .lte('start_datetime', rangeEnd)
       .gte('end_datetime', rangeStart)
       .order('start_datetime');
-    if (!isManagerOrAdmin) eventsQuery = eventsQuery.eq('user_id', currentUserId);
+
     const tasksQuery = supabase
       .from('tasks')
       .select('id, title, task_date, status, priority, customer:customers(company_name)')
@@ -116,6 +123,7 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
       .lte('start_date', endStr)
       .or('end_date.is.null,end_date.gte.' + startStr);
     if (!isManagerOrAdmin) sicknessQuery = sicknessQuery.eq('user_id', currentUserId);
+
     const [
       { data: eventsData, error: eventsError },
       { data: tasksData },
@@ -123,8 +131,25 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
       { data: completedJobsData },
       { data: sicknessData },
     ] = await Promise.all([eventsQuery, tasksQuery, holidaysQuery, completedJobsQuery, sicknessQuery]);
+
     if (eventsError) console.error('calendar_events query failed:', eventsError);
-    setEvents((eventsData as CalendarEvent[]) ?? []);
+
+    // Apply visibility filter for non-managers
+    let filteredEvents = (eventsData as any[]) ?? [];
+    if (!isManagerOrAdmin) {
+      filteredEvents = filteredEvents.filter(ev => {
+        const vis: Visibility = ev.visibility ?? 'all';
+        if (vis === 'all') return true;
+        if (vis === 'personal') return ev.user_id === currentUserId;
+        if (vis === 'custom') {
+          const vt = ev.visible_to as string[] | null;
+          return ev.user_id === currentUserId || (vt?.includes(currentUserId) ?? false);
+        }
+        return true;
+      });
+    }
+
+    setEvents(filteredEvents as CalendarEvent[]);
     setTasks(tasksData ?? []);
     setHolidays(holidaysData ?? []);
     setCompletedJobs(completedJobsData ?? []);
@@ -164,6 +189,8 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
     setNotes('');
     setCustomerId('');
     setLocationId('');
+    setVisibility('all');
+    setVisibleTo([]);
     setModalError('');
     setModalOpen(true);
   }
@@ -181,10 +208,13 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
     setNotes(ev.notes ?? '');
     setCustomerId((ev as any).customer_id ?? '');
     setLocationId((ev as any).location_id ?? '');
+    setVisibility((ev as any).visibility ?? 'all');
+    setVisibleTo((ev as any).visible_to ?? []);
     setModalError('');
     setModalOpen(true);
   }
 
+  // Owner can always edit; managers can edit anyone's; staff can only edit their own
   function canEdit(ev: CalendarEvent) {
     return isManagerOrAdmin || ev.user_id === currentUserId;
   }
@@ -208,6 +238,8 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
       customer_id: customerId || null,
       location_id: locationId || null,
       notes: notes || null,
+      visibility,
+      visible_to: visibility === 'custom' ? visibleTo : null,
     };
     let error;
     if (editingEvent) {
@@ -274,11 +306,12 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
   function EventChip({ event }: { event: CalendarEvent }) {
     const colour = CALENDAR_EVENT_COLOURS[event.event_type] ?? 'bg-gray-100 text-gray-700';
     const label = event.title ?? CALENDAR_EVENT_LABELS[event.event_type] ?? event.event_type;
+    const editable = canEdit(event);
     return (
       <div
-        onClick={e => { e.stopPropagation(); if (canEdit(event)) openEditModal(event); }}
-        className={cn('text-xs px-1.5 py-0.5 rounded border truncate', colour, canEdit(event) && 'cursor-pointer hover:opacity-75')}
-        title={canEdit(event) ? 'Click to edit' : undefined}
+        onClick={e => { e.stopPropagation(); if (editable) openEditModal(event); }}
+        className={cn('text-xs px-1.5 py-0.5 rounded border truncate', colour, editable && 'cursor-pointer hover:opacity-75')}
+        title={editable ? 'Click to edit' : undefined}
       >
         {isManagerOrAdmin ? (getStaffName(event.user_id).split(' ')[0] + ': ') : ''}{label}
       </div>
@@ -733,9 +766,19 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
     const isHolidayType = eventType === 'holiday';
     const isSicknessType = eventType === 'sickness';
     const isEditing = !!editingEvent;
+    const isRedirectType = isTaskType || isHolidayType || isSicknessType;
     const availableTypes = isEditing
       ? MODAL_EVENT_TYPES.filter(t => !['task', 'holiday', 'sickness'].includes(t.value))
       : MODAL_EVENT_TYPES;
+
+    const visibilityOptions: { value: Visibility; label: string; desc: string }[] = [
+      { value: 'all',      label: 'Everyone', desc: 'All staff can see this' },
+      { value: 'personal', label: 'Just me',  desc: 'Only you (and managers) can see this' },
+      ...(isManagerOrAdmin && allStaff && allStaff.length > 1
+        ? [{ value: 'custom' as Visibility, label: 'Custom', desc: 'Choose who can see this' }]
+        : []),
+    ];
+
     return (
       <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
         <div className="absolute inset-0 bg-black/40" onClick={() => setModalOpen(false)} />
@@ -746,6 +789,7 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
           </div>
           <div className="overflow-y-auto flex-1 p-4 space-y-4">
             {modalError && <div className="p-3 rounded-lg bg-red-50 text-sm text-red-700">{modalError}</div>}
+            {/* Event type */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Type</label>
               <div className="flex flex-wrap gap-1.5">
@@ -761,6 +805,7 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
                 ))}
               </div>
             </div>
+            {/* For (manager only) */}
             {isManagerOrAdmin && allStaff && allStaff.length > 0 && !isSicknessType && (
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">For</label>
@@ -771,16 +816,20 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
                 </select>
               </div>
             )}
+            {/* Title */}
             {!isHolidayType && !isSicknessType && !['office', 'home_working', 'travel'].includes(eventType) && (
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">{'Title' + (isTaskType ? ' *' : ' (optional)')}</label>
                 <input value={title} onChange={e => setTitle(e.target.value)} placeholder={isTaskType ? 'What needs doing?' : 'Add a title…'} className={inputClass} />
               </div>
             )}
+            {/* Dates */}
             {!isSicknessType && (
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">{isHolidayType ? 'From' : 'Date'}</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    {isHolidayType ? 'From' : 'Date'}
+                  </label>
                   <input
                     type="date"
                     value={modalDate}
@@ -793,7 +842,9 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
                 </div>
                 {!isTaskType && (
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">{isHolidayType ? 'To' : 'End date'}</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      {isHolidayType ? 'To' : 'End date'}
+                    </label>
                     <input
                       type="date"
                       value={endDate}
@@ -805,6 +856,7 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
                 )}
               </div>
             )}
+            {/* Time */}
             {!isTaskType && !isHolidayType && !isSicknessType && (
               <>
                 <label className="flex items-center gap-2 cursor-pointer select-none">
@@ -825,6 +877,7 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
                 )}
               </>
             )}
+            {/* Customer / Location */}
             {showCustomerLocation && (
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -843,12 +896,61 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
                 </div>
               </div>
             )}
+            {/* Notes */}
             {!isTaskType && !isHolidayType && !isSicknessType && (
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
                 <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2} className={inputClass + ' resize-none'} />
               </div>
             )}
+            {/* Visibility — hide for redirect types */}
+            {!isRedirectType && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Visible to</label>
+                <div className="flex gap-2 flex-wrap">
+                  {visibilityOptions.map(opt => (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => setVisibility(opt.value)}
+                      title={opt.desc}
+                      className={cn(
+                        'px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors',
+                        visibility === opt.value
+                          ? 'bg-aas-blue text-white border-aas-blue'
+                          : 'bg-white text-gray-600 border-gray-200 hover:border-gray-400'
+                      )}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+                {/* Custom picker */}
+                {visibility === 'custom' && allStaff && (
+                  <div className="mt-2 border border-gray-200 rounded-lg p-2 max-h-36 overflow-y-auto space-y-1">
+                    {allStaff.filter(s => s.id !== targetUserId).map(s => (
+                      <label key={s.id} className="flex items-center gap-2 cursor-pointer py-0.5">
+                        <input
+                          type="checkbox"
+                          checked={visibleTo.includes(s.id)}
+                          onChange={e =>
+                            setVisibleTo(prev =>
+                              e.target.checked ? [...prev, s.id] : prev.filter(id => id !== s.id)
+                            )
+                          }
+                          className="rounded"
+                        />
+                        <span className="text-xs text-gray-700">{s.full_name}</span>
+                      </label>
+                    ))}
+                  </div>
+                )}
+                {visibility === 'personal' && (
+                  <p className="text-xs text-gray-400 mt-1">Only you and managers will see this event.</p>
+                )}
+              </div>
+            )}
+            {/* Hint banners */}
             {isTaskType && !isEditing && <div className="rounded-lg bg-aas-blue-pale border border-aas-blue/20 px-3 py-2 text-xs text-aas-blue">{"You'll be taken to the task form with the date pre-filled."}</div>}
             {isHolidayType && !isEditing && <div className="rounded-lg bg-green-50 border border-green-100 px-3 py-2 text-xs text-green-700">{"You'll be taken to the holiday request form with the dates pre-filled."}</div>}
             {isSicknessType && !isEditing && <div className="rounded-lg bg-red-50 border border-red-100 px-3 py-2 text-xs text-red-700">{"You'll be taken to the sickness page to log the absence."}</div>}
@@ -893,6 +995,7 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
 
   return (
     <div className="flex flex-col h-full">
+      {/* Toolbar */}
       <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-100 bg-white shrink-0 flex-wrap gap-y-2">
         <div className="flex rounded-lg border border-gray-200 overflow-hidden text-xs">
           {VIEWS.filter(v => v !== 'timeline' || isManagerOrAdmin).map(v => (
@@ -919,6 +1022,7 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
           Add event
         </button>
       </div>
+      {/* Legend */}
       <div className="px-4 py-2 border-b border-gray-50 flex gap-3 overflow-x-auto shrink-0">
         <div className="flex items-center gap-1 shrink-0">
           <div className="w-2.5 h-2.5 rounded-sm border bg-green-100 border-green-200" />
@@ -943,6 +1047,7 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
           </div>
         ))}
       </div>
+      {/* Content */}
       {loading ? (
         <div className="flex-1 flex items-center justify-center">
           <div className="w-6 h-6 border-2 border-aas-blue border-t-transparent rounded-full animate-spin" />
