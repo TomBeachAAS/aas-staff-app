@@ -78,7 +78,7 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
     const rangeEnd = endStr + 'T23:59:59';
     let eventsQuery = supabase
       .from('calendar_events')
-      .select('*, user:profiles(id, full_name), customer:customers(company_name), location:locations(name)')
+      .select('*, customer:customers(company_name), location:locations(name)')
       .lte('start_datetime', rangeEnd)
       .gte('end_datetime', rangeStart)
       .order('start_datetime');
@@ -109,12 +109,13 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
       .or('end_date.is.null,end_date.gte.' + startStr);
     if (!isManagerOrAdmin) sicknessQuery = sicknessQuery.eq('user_id', currentUserId);
     const [
-      { data: eventsData },
-      { data: tasksData },
-      { data: holidaysData },
-      { data: completedJobsData },
-      { data: sicknessData },
-    ] = await Promise.all([eventsQuery, tasksQuery, holidaysQuery, completedJobsQuery, sicknessQuery]);
+  { data: eventsData, error: eventsError },
+  { data: tasksData },
+  { data: holidaysData },
+  { data: completedJobsData },
+  { data: sicknessData },
+] = await Promise.all([eventsQuery, tasksQuery, holidaysQuery, completedJobsQuery, sicknessQuery]);
+if (eventsError) console.error('calendar_events query failed:', eventsError);
     setEvents((eventsData as CalendarEvent[]) ?? []);
     setTasks(tasksData ?? []);
     setHolidays(holidaysData ?? []);
