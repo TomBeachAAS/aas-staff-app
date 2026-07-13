@@ -5,6 +5,21 @@ import { ArrowLeft, Pencil, Phone, MapPin, Navigation, ExternalLink, Car, Shield
 
 export const dynamic = 'force-dynamic';
 
+function buildMapsUrl(lat: any, lng: any, address: string) {
+  if (lat && lng) return 'https://www.google.com/maps?q=' + lat + ',' + lng;
+  return 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(address);
+}
+
+function buildNavUrl(lat: any, lng: any, address: string) {
+  if (lat && lng) return 'https://www.google.com/maps/dir/?api=1&destination=' + lat + ',' + lng;
+  return 'https://www.google.com/maps/dir/?api=1&destination=' + encodeURIComponent(address);
+}
+
+function cleanW3W(raw: string | null) {
+  if (!raw) return null;
+  return raw.startsWith('///') ? raw.slice(3) : raw;
+}
+
 export default async function LocationPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const supabase = await createClient();
@@ -23,21 +38,14 @@ export default async function LocationPage({ params }: { params: Promise<{ id: s
 
   const addressParts = [loc.address_line1, loc.address_line2, loc.town, loc.county, loc.postcode, loc.country].filter(Boolean);
   const fullAddress = addressParts.join(', ');
-
-  const mapsUrl = loc.latitude && loc.longitude
-    ? 'https://www.google.com/maps?q=' + loc.latitude + ',' + loc.longitude
-    : 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(fullAddress);
-
-  const navUrl = loc.latitude && loc.longitude
-    ? 'https://www.google.com/maps/dir/?api=1&destination=' + loc.latitude + ',' + loc.longitude
-    : 'https://www.google.com/maps/dir/?api=1&destination=' + encodeURIComponent(fullAddress);
-
-  const w3wClean = loc.what3words ? loc.what3words.replace(/^\/\/\//, '') : null;
+  const mapsUrl = buildMapsUrl(loc.latitude, loc.longitude, fullAddress);
+  const navUrl = buildNavUrl(loc.latitude, loc.longitude, fullAddress);
+  const w3wClean = cleanW3W(loc.what3words);
   const w3wUrl = w3wClean ? 'https://what3words.com/' + w3wClean : null;
 
   return (
     <div className="p-4 max-w-lg mx-auto space-y-4">
-      {/* Header */}
+
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <Link href="/locations" className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
@@ -61,7 +69,6 @@ export default async function LocationPage({ params }: { params: Promise<{ id: s
         )}
       </div>
 
-      {/* Map buttons */}
       {(fullAddress || (loc.latitude && loc.longitude)) && (
         <div className="grid grid-cols-2 gap-3">
           
@@ -85,7 +92,6 @@ export default async function LocationPage({ params }: { params: Promise<{ id: s
         </div>
       )}
 
-      {/* What3Words */}
       {w3wUrl && (
         
           href={w3wUrl}
@@ -102,7 +108,6 @@ export default async function LocationPage({ params }: { params: Promise<{ id: s
         </a>
       )}
 
-      {/* Address */}
       {fullAddress && (
         <div className="bg-white rounded-xl border border-gray-100 p-4">
           <p className="text-xs text-gray-400 mb-1">Address</p>
@@ -113,7 +118,6 @@ export default async function LocationPage({ params }: { params: Promise<{ id: s
         </div>
       )}
 
-      {/* Site contact */}
       {(loc.site_contact || loc.site_phone) && (
         <div className="bg-white rounded-xl border border-gray-100 p-4 space-y-2">
           <p className="text-xs text-gray-400">Site contact</p>
@@ -127,21 +131,20 @@ export default async function LocationPage({ params }: { params: Promise<{ id: s
         </div>
       )}
 
-      {/* Notes sections */}
-      {loc.access_notes && (
+      {(loc.access_notes || loc.parking_notes) && (
         <div className="bg-white rounded-xl border border-gray-100 p-4">
-          <div className="flex items-center gap-2 mb-1">
+          <div className="flex items-center gap-2 mb-2">
             <Car size={14} className="text-gray-400" />
             <p className="text-xs text-gray-400">Access & parking</p>
           </div>
-          <p className="text-sm text-gray-700 whitespace-pre-wrap">{loc.access_notes}</p>
+          {loc.access_notes && <p className="text-sm text-gray-700 whitespace-pre-wrap">{loc.access_notes}</p>}
           {loc.parking_notes && <p className="text-sm text-gray-700 mt-2 whitespace-pre-wrap">{loc.parking_notes}</p>}
         </div>
       )}
 
       {loc.health_safety_notes && (
         <div className="bg-amber-50 rounded-xl border border-amber-100 p-4">
-          <div className="flex items-center gap-2 mb-1">
+          <div className="flex items-center gap-2 mb-2">
             <ShieldAlert size={14} className="text-amber-600" />
             <p className="text-xs text-amber-600 font-medium">Health & safety</p>
           </div>
@@ -151,13 +154,14 @@ export default async function LocationPage({ params }: { params: Promise<{ id: s
 
       {loc.general_notes && (
         <div className="bg-white rounded-xl border border-gray-100 p-4">
-          <div className="flex items-center gap-2 mb-1">
+          <div className="flex items-center gap-2 mb-2">
             <FileText size={14} className="text-gray-400" />
             <p className="text-xs text-gray-400">General notes</p>
           </div>
           <p className="text-sm text-gray-700 whitespace-pre-wrap">{loc.general_notes}</p>
         </div>
       )}
+
     </div>
   );
 }
