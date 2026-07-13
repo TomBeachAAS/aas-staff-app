@@ -90,6 +90,7 @@ export default async function DashboardPage() {
 
   return (
     <div className="p-4 space-y-4 max-w-4xl mx-auto">
+
       <div>
         <h2 className="text-lg font-bold text-gray-800">
           Good {getGreeting()}, {profile.full_name.split(' ')[0]}
@@ -97,12 +98,7 @@ export default async function DashboardPage() {
         <p className="text-sm text-gray-500">{format(new Date(), 'EEEE, d MMMM yyyy')}</p>
       </div>
 
-      
-    href="https://robotti.agrointelli.com/"
-      target="_blank"
-        rel="noopener noreferrer"
-        className="flex items-center justify-between bg-green-700 hover:bg-green-800 transition-colors rounded-xl px-4 py-3"
-      >
+      <a href="https://robotti.agrointelli.com/" target="_blank" rel="noopener noreferrer" className="flex items-center justify-between bg-green-700 hover:bg-green-800 transition-colors rounded-xl px-4 py-3">
         <div>
           <p className="text-white font-semibold text-sm">Robotti Dashboard</p>
           <p className="text-green-200 text-xs">robotti.agrointelli.com</p>
@@ -116,16 +112,16 @@ export default async function DashboardPage() {
 
       {isManagerOrAdmin && (
         <div className="grid grid-cols-2 gap-3">
-          <StatCard label="Pending Approvals"  value={pendingApprovals ?? 0}  icon={Umbrella}    iconColor="text-amber-600"  iconBg="bg-amber-50"  />
-          <StatCard label="Staff Off Today"    value={staffOffToday ?? 0}     icon={CalendarX}   iconColor="text-blue-600"   iconBg="bg-blue-50"   />
-          <StatCard label="Overdue Tasks"      value={overdueTaskCount ?? 0}  icon={AlertCircle} iconColor="text-red-600"    iconBg="bg-red-50"    />
-          <StatCard label="Expenses to Review" value={pendingExpenses ?? 0}   icon={TrendingUp}  iconColor="text-purple-600" iconBg="bg-purple-50" />
+          <StatCard label="Pending Approvals" value={pendingApprovals ?? 0} icon={Umbrella} iconColor="text-amber-600" iconBg="bg-amber-50" />
+          <StatCard label="Staff Off Today" value={staffOffToday ?? 0} icon={CalendarX} iconColor="text-blue-600" iconBg="bg-blue-50" />
+          <StatCard label="Overdue Tasks" value={overdueTaskCount ?? 0} icon={AlertCircle} iconColor="text-red-600" iconBg="bg-red-50" />
+          <StatCard label="Expenses to Review" value={pendingExpenses ?? 0} icon={TrendingUp} iconColor="text-purple-600" iconBg="bg-purple-50" />
         </div>
       )}
 
       <div className="grid grid-cols-2 gap-3">
-        <StatCard label="Jobs Open"           value={openJobsCount ?? 0}         icon={Briefcase}   iconColor="text-orange-600" iconBg="bg-orange-50" />
-        <StatCard label="Completed This Week" value={completedJobsThisWeek ?? 0} icon={CheckSquare} iconColor="text-green-600"  iconBg="bg-green-50"  />
+        <StatCard label="Jobs Open" value={openJobsCount ?? 0} icon={Briefcase} iconColor="text-orange-600" iconBg="bg-orange-50" />
+        <StatCard label="Completed This Week" value={completedJobsThisWeek ?? 0} icon={CheckSquare} iconColor="text-green-600" iconBg="bg-green-50" />
       </div>
 
       <Card>
@@ -215,18 +211,14 @@ export default async function DashboardPage() {
       {isManagerOrAdmin && (pendingApprovals ?? 0) > 0 && (
         <Card>
           <CardContent className="py-3">
-            <Link
-              href="/holidays?filter=pending"
-              className="flex items-center justify-between text-sm text-aas-blue font-medium hover:underline"
-            >
-              <span>
-                Review {pendingApprovals} pending holiday {pendingApprovals === 1 ? 'request' : 'requests'}
-              </span>
+            <Link href="/holidays?filter=pending" className="flex items-center justify-between text-sm text-aas-blue font-medium hover:underline">
+              <span>Review {pendingApprovals} pending holiday {pendingApprovals === 1 ? 'request' : 'requests'}</span>
               <span>{'>'}</span>
             </Link>
           </CardContent>
         </Card>
       )}
+
     </div>
   );
 }
