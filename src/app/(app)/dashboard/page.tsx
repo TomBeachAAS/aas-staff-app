@@ -98,8 +98,8 @@ export default async function DashboardPage() {
       </div>
 
       
-        href="https://robotti.agrointelli.com/"
-        target="_blank"
+    href="https://robotti.agrointelli.com/"
+      target="_blank"
         rel="noopener noreferrer"
         className="flex items-center justify-between bg-green-700 hover:bg-green-800 transition-colors rounded-xl px-4 py-3"
       >
