@@ -32,6 +32,7 @@ export default async function TimesheetsPage({
 
   const viewUserId = sp.user ?? user.id;
 
+  // Get or create timesheet period (retry after failed insert handles unique-constraint races)
   const { data: existing } = await supabase
     .from('timesheet_periods')
     .select('*')
@@ -50,9 +51,22 @@ export default async function TimesheetsPage({
       })
       .select()
       .single();
-    period = newPeriod;
+
+    if (newPeriod) {
+      period = newPeriod;
+    } else {
+      // Insert failed (period already exists but wasn't SELECTable — re-fetch)
+      const { data: retried } = await supabase
+        .from('timesheet_periods')
+        .select('*')
+        .eq('user_id', viewUserId)
+        .eq('period_start', weekStartStr)
+        .single();
+      period = retried;
+    }
   }
 
+  // Fetch working pattern, approved leave and sickness in parallel
   const [
     { data: workingPattern },
     { data: leaveThisWeek },
@@ -63,6 +77,7 @@ export default async function TimesheetsPage({
     supabase.from('sickness_records').select('start_date, end_date').eq('user_id', viewUserId).lte('start_date', weekEndStr).or(`end_date.is.null,end_date.gte.${weekStartStr}`),
   ]);
 
+  // Get existing entries
   let entries: any[] = [];
   if (period) {
     const { data } = await supabase
@@ -73,10 +88,12 @@ export default async function TimesheetsPage({
     entries = data ?? [];
   }
 
+  // Auto-populate missing working days (skip leave/sickness days)
   if (period) {
     const wp = workingPattern as any;
     const existingDates = new Set(entries.map((e: any) => e.work_date));
 
+    // Derive hours per day
     const workingDayCount = wp
       ? ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'].filter(d => wp[d]).length
       : 5;
@@ -90,13 +107,24 @@ export default async function TimesheetsPage({
       .map(d => format(d, 'yyyy-MM-dd'))
       .filter(dateStr => {
         if (existingDates.has(dateStr)) return false;
+
         const dow = new Date(dateStr + 'T12:00:00').getDay();
-        if (wp) { if (!wp[DAY_KEYS[dow]]) return false; }
-        else { if (dow === 0 || dow === 6) return false; }
-        const onLeave = (leaveThisWeek ?? []).some((h: any) => dateStr >= h.start_date && dateStr <= h.end_date);
+        if (wp) {
+          if (!wp[DAY_KEYS[dow]]) return false;
+        } else {
+          if (dow === 0 || dow === 6) return false;
+        }
+
+        const onLeave = (leaveThisWeek ?? []).some(
+          (h: any) => dateStr >= h.start_date && dateStr <= h.end_date
+        );
         if (onLeave) return false;
-        const onSick = (sicknessThisWeek ?? []).some((s: any) => dateStr >= s.start_date && (s.end_date === null || dateStr <= s.end_date));
+
+        const onSick = (sicknessThisWeek ?? []).some(
+          (s: any) => dateStr >= s.start_date && (s.end_date === null || dateStr <= s.end_date)
+        );
         if (onSick) return false;
+
         return true;
       });
 
@@ -124,12 +152,14 @@ export default async function TimesheetsPage({
   const isManagerOrAdmin = ['administrator', 'manager'].includes(profile.role);
   const isLocked = period?.is_locked ?? false;
   const canEdit = (!isLocked || isManagerOrAdmin) && (viewUserId === user.id || isManagerOrAdmin);
+
   const prevWeek = format(addWeeks(weekStart, -1), 'yyyy-MM-dd');
   const nextWeek = format(addWeeks(weekStart, 1), 'yyyy-MM-dd');
 
   return (
     <div className="p-4 space-y-4 max-w-3xl mx-auto">
       <h2 className="text-lg font-bold text-gray-800">Timesheets</h2>
+
       <TimesheetWeek
         periodId={period?.id ?? ''}
         userId={viewUserId}
