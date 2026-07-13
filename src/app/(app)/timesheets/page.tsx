@@ -48,22 +48,73 @@ export default async function TimesheetsPage({
     period = newPeriod;
   }
 
-  // Get entries
-  const { data: entries } = period
-    ? await supabase
-        .from('timesheet_entries')
-        .select('*')
-        .eq('period_id', period.id)
-        .order('work_date')
-    : { data: [] };
-
-  // Default working pattern
+  // Working pattern
   const { data: workingPattern } = await supabase
     .from('working_patterns')
     .select('*')
     .eq('user_id', viewUserId)
     .eq('is_current', true)
     .single();
+
+  // Get existing entries
+  let entries: any[] = [];
+  if (period) {
+    const { data } = await supabase
+      .from('timesheet_entries')
+      .select('*')
+      .eq('period_id', period.id)
+      .order('work_date');
+    entries = data ?? [];
+  }
+
+  // Auto-populate working days that don't have an entry yet
+  if (period) {
+    const DAY_KEYS: Record<number, string> = { 1: 'mon', 2: 'tue', 3: 'wed', 4: 'thu', 5: 'fri', 6: 'sat', 0: 'sun' };
+    const existingDates = new Set(entries.map((e: any) => e.work_date));
+
+    // Derive default hours per day from weekly_hours / number of working days
+    const wp = workingPattern as any;
+    const workingDayCount = wp
+      ? ['mon','tue','wed','thu','fri','sat','sun'].filter(d => wp[d]).length
+      : 5;
+    const hoursPerDay = wp?.weekly_hours
+      ? wp.weekly_hours / (workingDayCount || 5)
+      : 8;
+    const endHour = 8 + Math.floor(hoursPerDay);
+    const endMin = Math.round((hoursPerDay % 1) * 60);
+    const defaultStart = '08:00:00';
+    const defaultEnd = `${String(endHour).padStart(2, '0')}:${String(endMin).padStart(2, '0')}:00`;
+
+    const missingDays = days
+      .map(d => format(d, 'yyyy-MM-dd'))
+      .filter(dateStr => {
+        if (existingDates.has(dateStr)) return false;
+        const dow = new Date(dateStr + 'T12:00:00').getDay();
+        if (!wp) return dow >= 1 && dow <= 5;
+        return wp[DAY_KEYS[dow]] === true;
+      });
+
+    if (missingDays.length > 0) {
+      await supabase.from('timesheet_entries').insert(
+        missingDays.map(dateStr => ({
+          period_id: period!.id,
+          user_id: viewUserId,
+          work_date: dateStr,
+          start_time: defaultStart,
+          end_time: defaultEnd,
+          is_auto_populated: true,
+        }))
+      );
+
+      // Re-fetch after auto-insert
+      const { data: refreshed } = await supabase
+        .from('timesheet_entries')
+        .select('*')
+        .eq('period_id', period.id)
+        .order('work_date');
+      entries = refreshed ?? [];
+    }
+  }
 
   const isManagerOrAdmin = ['administrator', 'manager'].includes(profile.role);
   const isLocked = period?.is_locked ?? false;
@@ -75,13 +126,12 @@ export default async function TimesheetsPage({
   return (
     <div className="p-4 space-y-4 max-w-3xl mx-auto">
       <h2 className="text-lg font-bold text-gray-800">Timesheets</h2>
-
       <TimesheetWeek
         periodId={period?.id ?? ''}
         userId={viewUserId}
         currentUserId={user.id}
         days={days.map(d => format(d, 'yyyy-MM-dd'))}
-        entries={entries ?? []}
+        entries={entries}
         workingPattern={workingPattern}
         weekStartStr={format(weekStart, 'yyyy-MM-dd')}
         prevWeek={prevWeek}
