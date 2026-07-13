@@ -6,6 +6,7 @@ import { Plus } from 'lucide-react';
 import { Card } from '@/components/ui/Card';
 import { ExpenseStatusBadge } from '@/components/ui/Badge';
 import { EXPENSE_CATEGORY_LABELS, cn } from '@/lib/utils';
+import { getEffectiveUserId } from '@/lib/effective-user';
 
 export const dynamic = 'force-dynamic';
 
@@ -21,9 +22,12 @@ export default async function ExpensesPage({
   const { data: profile } = await supabase.from('profiles').select('*').eq('id', user.id).single();
   if (!profile?.expenses_access) redirect('/dashboard');
 
+  // Respect impersonation
+  const { effectiveUserId, effectiveRole } = await getEffectiveUserId(supabase, user.id, profile.role);
+  const isManagerOrAdmin = ['administrator', 'manager'].includes(effectiveRole);
+
   const sp = await searchParams;
   const filter = sp.filter ?? 'mine';
-  const isManagerOrAdmin = ['administrator', 'manager'].includes(profile.role);
 
   let query = supabase
     .from('expenses')
@@ -32,18 +36,16 @@ export default async function ExpensesPage({
     .limit(100);
 
   if (!isManagerOrAdmin) {
-    // Staff always see only their own — enforced here and by RLS
-    query = query.eq('user_id', user.id);
+    query = query.eq('user_id', effectiveUserId);
   } else {
-    // Managers filter by tab
     if (filter === 'mine') {
-      query = query.eq('user_id', user.id);
+      query = query.eq('user_id', effectiveUserId);
     } else if (filter === 'pending') {
       query = query.eq('status', 'submitted');
     } else if (filter === 'approved') {
       query = query.eq('status', 'approved');
     }
-    // 'all' — no extra filter, returns everything
+    // 'all' — no extra filter
   }
 
   const { data: expenses } = await query;
@@ -59,10 +61,10 @@ export default async function ExpensesPage({
     : { count: null };
 
   const managerTabs = [
-    { key: 'mine',    label: 'Mine' },
-    { key: 'pending', label: 'Pending' },
-    { key: 'approved',label: 'Approved' },
-    { key: 'all',     label: 'All' },
+    { key: 'mine',     label: 'Mine' },
+    { key: 'pending',  label: 'Pending' },
+    { key: 'approved', label: 'Approved' },
+    { key: 'all',      label: 'All' },
   ];
 
   return (
@@ -108,7 +110,7 @@ export default async function ExpensesPage({
           ) : (
             (expenses ?? []).map((e: any) => {
               const ownerName = profileMap[e.user_id] ?? '';
-              const showOwner = isManagerOrAdmin && filter !== 'mine' && ownerName && e.user_id !== user.id;
+              const showOwner = isManagerOrAdmin && filter !== 'mine' && ownerName && e.user_id !== effectiveUserId;
               return (
                 <Link key={e.id} href={'/expenses/' + e.id} className="block px-4 py-3 hover:bg-gray-50 transition-colors">
                   <div className="flex items-start justify-between gap-2">
