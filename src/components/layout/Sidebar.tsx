@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation';
 import {
   LayoutDashboard, Calendar, Umbrella, Stethoscope, CheckSquare,
   ClipboardList, Users, Building2, MapPin, Truck, Clock, Receipt,
-  Navigation, BarChart3, Settings, Bell, LogOut, ChevronLeft, ChevronRight
+  Navigation, BarChart3, Settings, Bell, LogOut, ChevronLeft, ChevronRight, UserCircle
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { logout } from '@/lib/auth-actions';
@@ -109,6 +109,7 @@ export function Sidebar({ profile }: SidebarProps) {
 
       <div className="border-t border-gray-100 px-2 py-3 space-y-0.5">
         <NavItem href="/notifications" icon={Bell} label="Notifications" />
+        <NavItem href="/account" icon={UserCircle} label="My account" />
         <form action={logout}>
           <button type="submit" className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-gray-600 hover:bg-red-50 hover:text-red-600 transition-colors">
             <LogOut size={18} className="shrink-0" />
