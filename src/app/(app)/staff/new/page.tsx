@@ -1,9 +1,9 @@
 'use client';
 
 import { useActionState, useState } from 'react';
-import Link from 'next/link';
 import { createStaffMember } from './actions';
 import { ArrowLeft } from 'lucide-react';
+import Link from 'next/link';
 
 const ROLES = [
   { value: 'employee', label: 'Employee' },
