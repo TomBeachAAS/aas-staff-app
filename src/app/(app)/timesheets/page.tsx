@@ -5,6 +5,10 @@ import { TimesheetWeek } from '@/components/timesheets/TimesheetWeek';
 
 export const dynamic = 'force-dynamic';
 
+const DAY_KEYS: Record<number, string> = {
+  0: 'sun', 1: 'mon', 2: 'tue', 3: 'wed', 4: 'thu', 5: 'fri', 6: 'sat',
+};
+
 export default async function TimesheetsPage({
   searchParams,
 }: {
@@ -18,11 +22,14 @@ export default async function TimesheetsPage({
   if (!profile?.timesheet_access) redirect('/dashboard');
 
   const sp = await searchParams;
-  const weekStart = sp.week ? new Date(sp.week) : startOfWeek(new Date(), { weekStartsOn: 1 });
+  const weekStart = sp.week
+    ? new Date(sp.week + 'T12:00:00')
+    : startOfWeek(new Date(), { weekStartsOn: 1 });
   const weekEnd = endOfWeek(weekStart, { weekStartsOn: 1 });
   const days = eachDayOfInterval({ start: weekStart, end: weekEnd });
   const weekStartStr = format(weekStart, 'yyyy-MM-dd');
   const weekEndStr = format(weekEnd, 'yyyy-MM-dd');
+
   const viewUserId = sp.user ?? user.id;
 
   // Get or create timesheet period
@@ -47,7 +54,7 @@ export default async function TimesheetsPage({
     period = newPeriod;
   }
 
-  // Fetch working pattern, approved leave and sickness for this week in parallel
+  // Fetch working pattern, approved leave and sickness in parallel
   const [
     { data: workingPattern },
     { data: leaveThisWeek },
@@ -69,16 +76,11 @@ export default async function TimesheetsPage({
     entries = data ?? [];
   }
 
-  // Auto-populate working days that don't already have an entry,
-  // skipping days with approved leave or sickness
+  // Auto-populate missing scheduled working days (skip leave and sickness)
   if (period) {
-    const DAY_KEYS: Record<number, string> = {
-      0: 'sun', 1: 'mon', 2: 'tue', 3: 'wed', 4: 'thu', 5: 'fri', 6: 'sat',
-    };
     const wp = workingPattern as any;
     const existingDates = new Set(entries.map((e: any) => e.work_date));
 
-    // Derive hours per day from weekly_hours / number of working days
     const workingDayCount = wp
       ? ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'].filter(d => wp[d]).length
       : 5;
@@ -93,7 +95,6 @@ export default async function TimesheetsPage({
       .filter(dateStr => {
         if (existingDates.has(dateStr)) return false;
 
-        // Check working pattern
         const dow = new Date(dateStr + 'T12:00:00').getDay();
         if (wp) {
           if (!wp[DAY_KEYS[dow]]) return false;
@@ -101,13 +102,11 @@ export default async function TimesheetsPage({
           if (dow === 0 || dow === 6) return false;
         }
 
-        // Skip approved leave days
         const onLeave = (leaveThisWeek ?? []).some(
           (h: any) => dateStr >= h.start_date && dateStr <= h.end_date
         );
         if (onLeave) return false;
 
-        // Skip sickness days
         const onSick = (sicknessThisWeek ?? []).some(
           (s: any) => dateStr >= s.start_date && (s.end_date === null || dateStr <= s.end_date)
         );
@@ -128,7 +127,6 @@ export default async function TimesheetsPage({
         }))
       );
 
-      // Re-fetch after insert
       const { data: refreshed } = await supabase
         .from('timesheet_entries')
         .select('*')
@@ -141,6 +139,7 @@ export default async function TimesheetsPage({
   const isManagerOrAdmin = ['administrator', 'manager'].includes(profile.role);
   const isLocked = period?.is_locked ?? false;
   const canEdit = (!isLocked || isManagerOrAdmin) && (viewUserId === user.id || isManagerOrAdmin);
+
   const prevWeek = format(addWeeks(weekStart, -1), 'yyyy-MM-dd');
   const nextWeek = format(addWeeks(weekStart, 1), 'yyyy-MM-dd');
 
@@ -152,7 +151,7 @@ export default async function TimesheetsPage({
         userId={viewUserId}
         currentUserId={user.id}
         days={days.map(d => format(d, 'yyyy-MM-dd'))}
-        entries={entries}
+        entries={entries ?? []}
         workingPattern={workingPattern}
         weekStartStr={weekStartStr}
         prevWeek={prevWeek}
