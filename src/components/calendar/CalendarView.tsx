@@ -78,7 +78,7 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
     const rangeEnd = endStr + 'T23:59:59';
     let eventsQuery = supabase
       .from('calendar_events')
-      .select('*, customer:customers(company_name), location:locations(name)')
+      .select('*')
       .lte('start_datetime', rangeEnd)
       .gte('end_datetime', rangeStart)
       .order('start_datetime');
