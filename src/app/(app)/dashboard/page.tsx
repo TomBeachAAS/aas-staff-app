@@ -98,35 +98,44 @@ export default async function DashboardPage() {
         <p className="text-sm text-gray-500">{format(new Date(), 'EEEE, d MMMM yyyy')}</p>
       </div>
 
-      <a href="https://robotti.agrointelli.com/" target="_blank" rel="noopener noreferrer" className="flex items-center justify-between bg-green-700 hover:bg-green-800 transition-colors rounded-xl px-4 py-3">
-        <div>
-          <p className="text-white font-semibold text-sm">Robotti Dashboard</p>
-          <p className="text-green-200 text-xs">robotti.agrointelli.com</p>
-        </div>
-        <ExternalLink size={18} className="text-green-300 shrink-0" />
-      </a>
-
       <MotivationalBanner />
+
+      <div className="grid grid-cols-2 gap-3">
+        <a href="https://robotti.agrointelli.com/" target="_blank" rel="noopener noreferrer" className="flex items-center justify-between bg-green-700 hover:bg-green-800 transition-colors rounded-xl px-4 py-3">
+          <div>
+            <p className="text-white font-semibold text-sm">Robotti Dashboard</p>
+            <p className="text-green-200 text-xs">agrointelli.com</p>
+          </div>
+          <ExternalLink size={16} className="text-green-300 shrink-0" />
+        </a>
+        <a href="http://192.168.10.1:8888/" target="_blank" rel="noopener noreferrer" className="flex items-center justify-between bg-orange-600 hover:bg-orange-700 transition-colors rounded-xl px-4 py-3">
+          <div>
+            <p className="text-white font-semibold text-sm">Tobotti Terminal</p>
+            <p className="text-orange-200 text-xs">192.168.10.1</p>
+          </div>
+          <ExternalLink size={16} className="text-orange-300 shrink-0" />
+        </a>
+      </div>
 
       <WeatherWidget />
 
       {isManagerOrAdmin && (
         <div className="grid grid-cols-2 gap-3">
-          <StatCard label="Pending Approvals" value={pendingApprovals ?? 0} icon={Umbrella} iconColor="text-amber-600" iconBg="bg-amber-50" />
-          <StatCard label="Staff Off Today" value={staffOffToday ?? 0} icon={CalendarX} iconColor="text-blue-600" iconBg="bg-blue-50" />
-          <StatCard label="Overdue Tasks" value={overdueTaskCount ?? 0} icon={AlertCircle} iconColor="text-red-600" iconBg="bg-red-50" />
-          <StatCard label="Expenses to Review" value={pendingExpenses ?? 0} icon={TrendingUp} iconColor="text-purple-600" iconBg="bg-purple-50" />
+          <StatCard label="Pending Approvals"  value={pendingApprovals ?? 0}  icon={Umbrella}    iconColor="text-amber-600"  iconBg="bg-amber-50"  />
+          <StatCard label="Staff Off Today"    value={staffOffToday ?? 0}     icon={CalendarX}   iconColor="text-blue-600"   iconBg="bg-blue-50"   />
+          <StatCard label="Overdue Tasks"      value={overdueTaskCount ?? 0}  icon={AlertCircle} iconColor="text-red-600"    iconBg="bg-red-50"    />
+          <StatCard label="Expenses to Review" value={pendingExpenses ?? 0}   icon={TrendingUp}  iconColor="text-purple-600" iconBg="bg-purple-50" />
         </div>
       )}
 
       <div className="grid grid-cols-2 gap-3">
-        <StatCard label="Jobs Open" value={openJobsCount ?? 0} icon={Briefcase} iconColor="text-orange-600" iconBg="bg-orange-50" />
-        <StatCard label="Completed This Week" value={completedJobsThisWeek ?? 0} icon={CheckSquare} iconColor="text-green-600" iconBg="bg-green-50" />
+        <StatCard label="Jobs Open"           value={openJobsCount ?? 0}         icon={Briefcase}   iconColor="text-orange-600" iconBg="bg-orange-50" />
+        <StatCard label="Completed This Week" value={completedJobsThisWeek ?? 0} icon={CheckSquare} iconColor="text-green-600"  iconBg="bg-green-50"  />
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle>Today's schedule</CardTitle>
+          <CardTitle>Today&apos;s schedule</CardTitle>
         </CardHeader>
         {(todayEvents ?? []).length === 0 ? (
           <CardContent>
@@ -138,9 +147,7 @@ export default async function DashboardPage() {
               <div key={ev.id} className="px-4 py-3 flex items-start gap-3">
                 <div className="w-2 h-2 rounded-full bg-aas-blue mt-1.5 shrink-0" />
                 <div className="min-w-0">
-                  <p className="text-sm font-medium text-gray-800">
-                    {ev.title ?? ev.event_type?.replace('_', ' ')}
-                  </p>
+                  <p className="text-sm font-medium text-gray-800">{ev.title ?? ev.event_type?.replace('_', ' ')}</p>
                   {ev.customer && <p className="text-xs text-gray-500">{ev.customer.company_name}</p>}
                   {ev.location && <p className="text-xs text-gray-400">{ev.location.name}</p>}
                 </div>
@@ -192,7 +199,7 @@ export default async function DashboardPage() {
         )}
 
         {(completedTasks ?? []).length > 0 && (
-          <div className={`px-4 pb-4 pt-3 ${(todayTasks.length > 0 || overdueTasks.length > 0) ? 'border-t border-gray-50 mt-1' : ''}`}>
+          <div className={'px-4 pb-4 pt-3 ' + ((todayTasks.length > 0 || overdueTasks.length > 0) ? 'border-t border-gray-50 mt-1' : '')}>
             <p className="text-xs font-semibold text-green-600 uppercase tracking-wider mb-2">
               {'Completed last 7 days (' + (completedTasks ?? []).length + ')'}
             </p>
@@ -212,7 +219,7 @@ export default async function DashboardPage() {
         <Card>
           <CardContent className="py-3">
             <Link href="/holidays?filter=pending" className="flex items-center justify-between text-sm text-aas-blue font-medium hover:underline">
-              <span>Review {pendingApprovals} pending holiday {pendingApprovals === 1 ? 'request' : 'requests'}</span>
+              <span>{'Review ' + pendingApprovals + ' pending holiday ' + (pendingApprovals === 1 ? 'request' : 'requests')}</span>
               <span>{'>'}</span>
             </Link>
           </CardContent>
