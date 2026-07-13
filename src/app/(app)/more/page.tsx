@@ -3,7 +3,7 @@ import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import {
   Users, Building2, MapPin, Truck, Clock, Receipt,
-  Navigation, BarChart3, Settings, Bell, LogOut, Stethoscope
+  Navigation, BarChart3, Settings, Bell, LogOut, Stethoscope, UserCircle
 } from 'lucide-react';
 import { logout } from '@/lib/auth-actions';
 
@@ -23,6 +23,7 @@ export default async function MorePage() {
       items: [
         { href: '/sickness', icon: Stethoscope, label: 'Sickness' },
         { href: '/notifications', icon: Bell, label: 'Notifications' },
+        { href: '/account', icon: UserCircle, label: 'My account' },
       ],
     },
     ...(isManagerOrAdmin ? [{
@@ -70,7 +71,6 @@ export default async function MorePage() {
           </div>
         </div>
       ))}
-
       <div className="bg-white rounded-xl border border-gray-100">
         <div className="px-4 py-3 border-b border-gray-50">
           <p className="text-sm font-medium text-gray-800">{profile.full_name}</p>
