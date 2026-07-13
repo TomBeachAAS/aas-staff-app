@@ -1,11 +1,11 @@
 import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
-import { format } from 'date-fns';
-import { Plus, UserCheck, UserX } from 'lucide-react';
+import { Plus } from 'lucide-react';
 import { Badge } from '@/components/ui/Badge';
 import { Card } from '@/components/ui/Card';
 import { cn, ROLE_LABELS } from '@/lib/utils';
+import { startImpersonation } from '@/app/actions/impersonation';
 
 export const dynamic = 'force-dynamic';
 
@@ -30,7 +30,6 @@ export default async function StaffPage({
     .eq('status', statusFilter)
     .order('full_name');
 
-  // Pending approvals (admin only)
   let pendingStaff = null;
   if (profile?.role === 'administrator') {
     const { data } = await supabase.from('profiles').select('*').eq('status', 'pending').order('created_at');
@@ -44,11 +43,13 @@ export default async function StaffPage({
     contractor: 'amber',
   };
 
+  const isAdmin = profile?.role === 'administrator';
+
   return (
     <div className="p-4 space-y-4 max-w-3xl mx-auto">
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-bold text-gray-800">Staff</h2>
-        {profile?.role === 'administrator' && (
+        {isAdmin && (
           <Link href="/staff/new" className="flex items-center gap-1.5 px-3 py-2 bg-aas-blue text-white rounded-lg text-sm font-medium hover:bg-aas-blue-dark">
             <Plus size={16} />
             Add staff
@@ -56,10 +57,11 @@ export default async function StaffPage({
         )}
       </div>
 
-      {/* Pending approvals */}
       {pendingStaff && pendingStaff.length > 0 && (
         <div className="bg-amber-50 rounded-xl border border-amber-100 p-4">
-          <p className="text-sm font-semibold text-amber-800 mb-3">{pendingStaff.length} account{pendingStaff.length > 1 ? 's' : ''} awaiting approval</p>
+          <p className="text-sm font-semibold text-amber-800 mb-3">
+            {pendingStaff.length} account{pendingStaff.length > 1 ? 's' : ''} awaiting approval
+          </p>
           <div className="space-y-2">
             {pendingStaff.map(s => (
               <div key={s.id} className="flex items-center justify-between bg-white rounded-lg px-3 py-2">
@@ -76,7 +78,6 @@ export default async function StaffPage({
         </div>
       )}
 
-      {/* Status filter */}
       <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
         {[
           { key: 'active', label: 'Active' },
@@ -102,19 +103,30 @@ export default async function StaffPage({
             <div className="text-center py-10 text-sm text-gray-400">No staff members found</div>
           ) : (
             (staff ?? []).map(s => (
-              <Link key={s.id} href={`/staff/${s.id}`} className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors">
-                {/* Avatar */}
+              <div key={s.id} className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors">
                 <div className="w-9 h-9 rounded-full bg-aas-blue flex items-center justify-center shrink-0">
                   <span className="text-white text-xs font-bold">
                     {s.full_name.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase()}
                   </span>
                 </div>
-                <div className="flex-1 min-w-0">
+                <Link href={`/staff/${s.id}`} className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-gray-800 truncate">{s.full_name}</p>
                   <p className="text-xs text-gray-400 truncate">{s.job_title ?? s.email}</p>
+                </Link>
+                <div className="flex items-center gap-2 shrink-0">
+                  <Badge variant={roleBadge[s.role] ?? 'default'}>{ROLE_LABELS[s.role]}</Badge>
+                  {isAdmin && s.id !== user.id && (
+                    <form action={startImpersonation.bind(null, s.id)}>
+                      <button
+                        type="submit"
+                        className="text-xs px-2 py-1 border border-gray-200 rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-700 transition-colors whitespace-nowrap"
+                      >
+                        Log in as
+                      </button>
+                    </form>
+                  )}
                 </div>
-                <Badge variant={roleBadge[s.role] ?? 'default'}>{ROLE_LABELS[s.role]}</Badge>
-              </Link>
+              </div>
             ))
           )}
         </div>
