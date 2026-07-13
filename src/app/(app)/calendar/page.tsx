@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
 import { CalendarView } from '@/components/calendar/CalendarView';
+import { getEffectiveUser } from '@/lib/effective-user';
 
 export const dynamic = 'force-dynamic';
 
@@ -13,16 +14,30 @@ export default async function CalendarPage({
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect('/login');
 
-  const { data: profile } = await supabase.from('profiles').select('*').eq('id', user.id).single();
-  if (!profile) redirect('/login');
+  const { data: realProfile } = await supabase
+    .from('profiles')
+    .select('*')
+    .eq('id', user.id)
+    .single();
+  if (!realProfile) redirect('/login');
+
+  const { effectiveUserId, effectiveRole } = await getEffectiveUser(
+    supabase,
+    user.id,
+    realProfile.role,
+  );
+
+  const effectiveProfile =
+    effectiveUserId === user.id
+      ? realProfile
+      : (await supabase.from('profiles').select('*').eq('id', effectiveUserId).single()).data ?? realProfile;
 
   const sp = await searchParams;
   const view = (sp.view ?? 'month') as 'day' | 'week' | 'month' | 'timeline';
   const dateStr = sp.date ?? new Date().toISOString().split('T')[0];
 
-  // Load all active staff for manager timeline view
   let allStaff = null;
-  if (['administrator', 'manager'].includes(profile.role)) {
+  if (['administrator', 'manager'].includes(effectiveRole)) {
     const { data } = await supabase
       .from('profiles')
       .select('id, full_name, role')
@@ -31,7 +46,6 @@ export default async function CalendarPage({
     allStaff = data;
   }
 
-  // Bank holidays
   const { data: bankHolidays } = await supabase
     .from('bank_holidays')
     .select('*')
@@ -40,8 +54,8 @@ export default async function CalendarPage({
   return (
     <div className="h-full flex flex-col">
       <CalendarView
-        currentUserId={user.id}
-        profile={profile}
+        currentUserId={effectiveUserId}
+        profile={effectiveProfile}
         initialView={view}
         initialDate={dateStr}
         allStaff={allStaff}
