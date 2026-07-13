@@ -11,13 +11,11 @@ export default async function VehiclesPage() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect('/login');
 
-  const [{ data: allVehicles }, { data: equipment }] = await Promise.all([
-    supabase.from('vehicles').select('*').eq('is_active', true).order('name'),
-    supabase.from('equipment').select('*').eq('is_active', true).order('name'),
-  ]);
-
   const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
   const isManagerOrAdmin = ['administrator', 'manager'].includes(profile?.role ?? '');
+
+  const { data: allVehicles } = await supabase.from('vehicles').select('*').eq('is_active', true).order('name');
+  const { data: equipment } = await supabase.from('equipment').select('*').eq('is_active', true).order('name');
 
   const vehicles = (allVehicles ?? []).filter((v: any) => v.type !== 'machine');
   const machines = (allVehicles ?? []).filter((v: any) => v.type === 'machine');
@@ -25,9 +23,9 @@ export default async function VehiclesPage() {
   return (
     <div className="p-4 space-y-4 max-w-2xl mx-auto">
       <div className="flex items-center justify-between">
-        <h2 className="text-lg font-bold text-gray-800">Vehicles & Machines</h2>
+        <h2 className="text-lg font-bold text-gray-800">Vehicles &amp; Machines</h2>
         {isManagerOrAdmin && (
-          <Link href="/vehicles/new" className="flex items-center gap-1.5 px-3 py-2 bg-aas-blue text-white rounded-lg text-sm font-medium hover:bg-aas-blue-dark">
+          <Link href="/vehicles/new" className="flex items-center gap-1.5 px-3 py-2 bg-aas-blue text-white rounded-lg text-sm font-medium">
             <Plus size={16} />
             Add
           </Link>
@@ -89,3 +87,15 @@ export default async function VehiclesPage() {
                     {e.type && <p className="text-xs text-gray-400">{e.type}</p>}
                   </div>
                 </div>
+              ))}
+            </div>
+          </Card>
+        </>
+      )}
+
+      {vehicles.length === 0 && machines.length === 0 && (equipment ?? []).length === 0 && (
+        <div className="text-center py-12 text-sm text-gray-400">No vehicles or machines yet</div>
+      )}
+    </div>
+  );
+}
