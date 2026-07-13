@@ -89,7 +89,7 @@ export function MotivationalBanner() {
     return () => clearInterval(interval);
   }, []);
 
-  return (
+return (
     
       href={video}
       target="_blank"
@@ -104,4 +104,3 @@ export function MotivationalBanner() {
       </p>
     </a>
   );
-}
