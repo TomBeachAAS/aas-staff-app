@@ -25,6 +25,15 @@ export function ApproveHolidayForm({ holidayId, approvedBy }: { holidayId: strin
       })
       .eq('id', holidayId);
     if (err) { setError(err.message); setLoading(false); return; }
+    // Notify the requester
+fetch('/api/notify', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    type: 'holiday_decision',
+    data: { holidayId, status: action },
+  }),
+});
     router.push('/holidays?filter=pending');
   }
 
