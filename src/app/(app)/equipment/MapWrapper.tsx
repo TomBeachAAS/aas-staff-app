@@ -1,10 +1,6 @@
 'use client';
-import dynamic from 'next/dynamic';
 
-const Map = dynamic(() => import('./EquipmentMapView').then(m => m.EquipmentMapView), {
-  ssr: false,
-  loading: () => <div className="h-64 bg-gray-100 rounded-xl animate-pulse" />,
-});
+import { EquipmentMapView } from './EquipmentMapView';
 
 interface Item {
   id: string; name: string; type: string;
@@ -12,5 +8,5 @@ interface Item {
 }
 
 export function MapWrapper({ equipment }: { equipment: Item[] }) {
-  return <Map equipment={equipment} />;
+  return <EquipmentMapView equipment={equipment} />;
 }
