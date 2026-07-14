@@ -171,7 +171,7 @@ export function DetailWrapper({ item, userId }: { item: Item; userId: string }) 
           >
             <Navigation size={15} />
             Get directions
-          </a>
+          <a>
         )}
       </div>
 
