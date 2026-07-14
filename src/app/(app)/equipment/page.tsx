@@ -1,16 +1,11 @@
 import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
-import loadDynamic from 'next/dynamic';
 import Link from 'next/link';
 import { Plus, MapPin, Wrench, Truck } from 'lucide-react';
 import { format } from 'date-fns';
+import { MapWrapper } from './MapWrapper';
 
 export const dynamic = 'force-dynamic';
-
-const EquipmentMapView = loadDynamic(
-  () => import('./EquipmentMapView').then(m => m.EquipmentMapView),
-  { ssr: false, loading: () => <div className="h-64 bg-gray-100 rounded-xl animate-pulse" /> }
-);
 
 export default async function EquipmentPage() {
   const supabase = await createClient();
@@ -42,7 +37,7 @@ export default async function EquipmentPage() {
         )}
       </div>
 
-      {hasLocations && <EquipmentMapView equipment={equipment} />}
+      {hasLocations && <MapWrapper equipment={equipment} />}
 
       <div className="space-y-2">
         {equipment.length === 0 && (
