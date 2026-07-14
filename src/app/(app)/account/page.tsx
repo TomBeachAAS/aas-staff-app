@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
 import { CalendarFeedCard } from './CalendarFeedCard';
+import { NotificationPrompt } from '@/components/notifications/NotificationPrompt';
 
 export const dynamic = 'force-dynamic';
 
@@ -32,6 +33,7 @@ export default async function AccountPage() {
         </span>
       </div>
 
+      <NotificationPrompt />
       <CalendarFeedCard feedUrl={feedUrl} userId={user.id} />
     </div>
   );
