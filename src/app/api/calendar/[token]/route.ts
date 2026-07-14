@@ -53,8 +53,9 @@ export async function GET(
   _request: NextRequest,
   { params }: { params: Promise<{ token: string }> },
 ) {
-  const { token } = await params;
-  if (!token) return new NextResponse('Not found', { status: 404 });
+  const { token: rawToken } = await params;
+const token = rawToken?.replace(/\.ics$/, '');
+if (!token) return new NextResponse('Not found', { status: 404 });
 
   const supabase = createAdminClient();
 
