@@ -18,7 +18,7 @@ const navItems = [
   { href: '/holidays', icon: Umbrella, label: 'Holidays' },
   { href: '/sickness', icon: Stethoscope, label: 'Sickness' },
   { href: '/tasks', icon: CheckSquare, label: 'Tasks' },
-  { href: '/jobs', icon: ClipboardList, label: 'Job Board' },
+  { href: '/equipment', icon: Wrench, label: 'Equipment' },
 ];
 
 const managerItems = [
