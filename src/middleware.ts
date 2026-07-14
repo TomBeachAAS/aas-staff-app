@@ -1,13 +1,15 @@
-// Let calendar feed through without any auth redirect
-if (pathname.startsWith('/api/calendar/')) {
-  return NextResponse.next({ request });
-}
 import { NextResponse, type NextRequest } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
 
 export async function middleware(request: NextRequest) {
-  let supabaseResponse = NextResponse.next({ request });
+  const { pathname } = request.nextUrl;
 
+  // Let calendar feed through without any auth redirect
+  if (pathname.startsWith('/api/calendar/')) {
+    return NextResponse.next({ request });
+  }
+
+  let supabaseResponse = NextResponse.next({ request });
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -28,10 +30,9 @@ export async function middleware(request: NextRequest) {
   );
 
   const { data: { user } } = await supabase.auth.getUser();
-  const { pathname } = request.nextUrl;
 
   // Public routes that don't require auth
-  const publicRoutes = ['/login', '/register', '/pending', '];
+  const publicRoutes = ['/login', '/register', '/pending'];
   const isPublicRoute = publicRoutes.some(r => pathname.startsWith(r));
 
   if (!user && !isPublicRoute) {
@@ -42,19 +43,16 @@ export async function middleware(request: NextRequest) {
   }
 
   if (user && isPublicRoute && pathname !== '/pending') {
-    // Check user status
     const { data: profile } = await supabase
       .from('profiles')
       .select('status')
       .eq('id', user.id)
       .single();
-
     if (profile?.status === 'pending') {
       const pendingUrl = request.nextUrl.clone();
       pendingUrl.pathname = '/pending';
       return NextResponse.redirect(pendingUrl);
     }
-
     const dashboardUrl = request.nextUrl.clone();
     dashboardUrl.pathname = '/dashboard';
     return NextResponse.redirect(dashboardUrl);
@@ -66,7 +64,6 @@ export async function middleware(request: NextRequest) {
       .select('status')
       .eq('id', user.id)
       .single();
-
     if (profile?.status === 'active') {
       const dashboardUrl = request.nextUrl.clone();
       dashboardUrl.pathname = '/dashboard';
