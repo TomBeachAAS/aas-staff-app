@@ -1,10 +1,6 @@
 'use client';
-import dynamic from 'next/dynamic';
 
-const Detail = dynamic(() => import('./EquipmentDetailClient').then(m => m.EquipmentDetailClient), {
-  ssr: false,
-  loading: () => <div className="h-72 bg-gray-100 rounded-xl animate-pulse" />,
-});
+import { EquipmentDetailClient } from './EquipmentDetailClient';
 
 interface Item {
   id: string; name: string; type: string;
@@ -15,5 +11,5 @@ interface Item {
 }
 
 export function DetailWrapper({ item, userId }: { item: Item; userId: string }) {
-  return <Detail item={item} userId={userId} />;
-}  
+  return <EquipmentDetailClient item={item} userId={userId} />;
+}
