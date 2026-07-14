@@ -4,7 +4,7 @@ import { createServerClient } from '@supabase/ssr';
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // Let calendar feed through without any auth redirect
+  // Let calendar feed through without any auth redirect a 
   if (pathname.startsWith('/api/calendar/')) {
     return NextResponse.next({ request });
   }
