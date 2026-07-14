@@ -162,17 +162,17 @@ export function DetailWrapper({ item, userId }: { item: Item; userId: string }) 
           <MapPin size={15} />
           {dropPinMode ? 'Cancel' : 'Drop pin'}
         </button>
-        {lat != null && lng != null && (
-          
-            href={`https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="col-span-2 flex items-center justify-center gap-2 py-3 bg-green-600 text-white rounded-xl text-sm font-medium"
-          >
-            <Navigation size={15} />
-            Get directions
-          <a>
-        )}
+      {lat != null && lng != null && (
+  
+    href={`https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`}
+    target="_blank"
+    rel="noopener noreferrer"
+    className="col-span-2 flex items-center justify-center gap-2 py-3 bg-green-600 text-white rounded-xl text-sm font-medium"
+  >
+    <Navigation size={15} />
+    Get directions
+  </a>
+)}
       </div>
 
       {error && <p className="text-sm text-red-500 text-center">{error}</p>}
