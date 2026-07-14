@@ -1,3 +1,7 @@
+// Let calendar feed through without any auth redirect
+if (pathname.startsWith('/api/calendar/')) {
+  return NextResponse.next({ request });
+}
 import { NextResponse, type NextRequest } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
 
@@ -27,7 +31,7 @@ export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   // Public routes that don't require auth
-  const publicRoutes = ['/login', '/register', '/pending', '/api/calendar/'];
+  const publicRoutes = ['/login', '/register', '/pending', '];
   const isPublicRoute = publicRoutes.some(r => pathname.startsWith(r));
 
   if (!user && !isPublicRoute) {
