@@ -6,7 +6,8 @@ import { Badge } from '@/components/ui/Badge';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { ROLE_LABELS } from '@/lib/utils';
 import { StaffActionButtons } from '@/components/staff/StaffActionButtons';
-import { Clock } from 'lucide-react'
+import { WorkingPatternEditor } from '@/components/staff/WorkingPatternEditor';
+import { Clock } from 'lucide-react';
 
 export const dynamic = 'force-dynamic';
 
@@ -24,11 +25,12 @@ export default async function StaffDetailPage({ params }: { params: Promise<{ id
   const { data: profile } = await supabase.from('profiles').select('*').eq('id', id).single();
   if (!profile) notFound();
 
-  const { data: pattern } = await supabase.from('working_patterns').select('*').eq('user_id', id).eq('is_current', true).single();
-
-  const dayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-  const dayKeys: (keyof typeof pattern)[] = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
-  const workingDays = pattern ? dayNames.filter((_, i) => pattern[dayKeys[i]]) : ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
+  const { data: pattern } = await supabase
+    .from('working_patterns')
+    .select('*')
+    .eq('user_id', id)
+    .eq('is_current', true)
+    .single();
 
   return (
     <div className="p-4 space-y-4 max-w-2xl mx-auto">
@@ -63,19 +65,20 @@ export default async function StaffDetailPage({ params }: { params: Promise<{ id
       <Card>
         <CardHeader><CardTitle>Working pattern</CardTitle></CardHeader>
         <CardContent>
-          <div className="flex gap-1.5 flex-wrap">
-            {dayNames.map(d => (
-              <span
-                key={d}
-                className={`text-xs font-medium px-2 py-1 rounded-full ${
-                  workingDays.includes(d) ? 'bg-aas-blue text-white' : 'bg-gray-100 text-gray-400'
-                }`}
-              >
-                {d}
-              </span>
-            ))}
-          </div>
-          <p className="text-xs text-gray-400 mt-2">{pattern?.weekly_hours ?? 45}h per week</p>
+          <WorkingPatternEditor
+            userId={id}
+            pattern={pattern ? {
+              id: (pattern as any).id,
+              mon: !!pattern.mon,
+              tue: !!pattern.tue,
+              wed: !!pattern.wed,
+              thu: !!pattern.thu,
+              fri: !!pattern.fri,
+              sat: !!pattern.sat,
+              sun: !!pattern.sun,
+              weekly_hours: pattern.weekly_hours ?? 40,
+            } : null}
+          />
         </CardContent>
       </Card>
 
@@ -83,23 +86,26 @@ export default async function StaffDetailPage({ params }: { params: Promise<{ id
         <Card>
           <CardHeader><CardTitle>Holiday allowance</CardTitle></CardHeader>
           <CardContent>
-            <p className="text-2xl font-bold text-gray-800">{profile.holiday_allowance} <span className="text-sm text-gray-400 font-normal">days per leave year</span></p>
+            <p className="text-2xl font-bold text-gray-800">
+              {profile.holiday_allowance}{' '}
+              <span className="text-sm text-gray-400 font-normal">days per leave year</span>
+            </p>
           </CardContent>
         </Card>
       )}
 
       {profile.timesheet_access && (
-  <Link
-    href={`/timesheets?user=${id}`}
-    className="flex items-center gap-3 bg-white rounded-xl border border-gray-100 px-4 py-3 hover:bg-gray-50 transition-colors"
-  >
-    <Clock size={18} className="text-aas-blue shrink-0" />
-    <div>
-      <p className="text-sm font-medium text-gray-800">View timesheets</p>
-      <p className="text-xs text-gray-400">Review and approve {profile.full_name.split(' ')[0]}'s hours</p>
-    </div>
-  </Link>
-)}
+        <Link
+          href={`/timesheets?user=${id}`}
+          className="flex items-center gap-3 bg-white rounded-xl border border-gray-100 px-4 py-3 hover:bg-gray-50 transition-colors"
+        >
+          <Clock size={18} className="text-aas-blue shrink-0" />
+          <div>
+            <p className="text-sm font-medium text-gray-800">View timesheets</p>
+            <p className="text-xs text-gray-400">Review and approve {profile.full_name.split(' ')[0]}'s hours</p>
+          </div>
+        </Link>
+      )}
 
       {isAdmin && (
         <StaffActionButtons
