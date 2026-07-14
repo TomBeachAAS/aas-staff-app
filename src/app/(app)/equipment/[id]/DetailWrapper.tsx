@@ -1,5 +1,4 @@
 'use client';
-
 import { useState, useEffect, useRef } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { Navigation, MapPin, Crosshair, Check } from 'lucide-react';
@@ -18,7 +17,6 @@ export function DetailWrapper({ item, userId }: { item: Item; userId: string }) 
   const mapRef = useRef<any>(null);
   const markerRef = useRef<any>(null);
   const dropPinModeRef = useRef(false);
-
   const [lat, setLat] = useState<number | null>(item.lat);
   const [lng, setLng] = useState<number | null>(item.lng);
   const [updatedAt, setUpdatedAt] = useState(item.location_updated_at);
