@@ -4,7 +4,7 @@ import { createServerClient } from '@supabase/ssr';
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // Let calendar feed through without any auth redirect a 
+  // Let calendar feed through without any auth redirect
   if (pathname.startsWith('/api/calendar/')) {
     return NextResponse.next({ request });
   }
@@ -29,10 +29,8 @@ export async function middleware(request: NextRequest) {
     }
   );
 
-  
   const { data: { user } } = await supabase.auth.getUser();
 
-  // Public routes that don't require auth
   const publicRoutes = ['/login', '/register', '/pending'];
   const isPublicRoute = publicRoutes.some(r => pathname.startsWith(r));
 
