@@ -165,7 +165,15 @@ export function NewTaskForm({ userId, initialDate, staff, customers: initialCust
         return;
       }
     }
-
+// Notify assignees (excluding the creator)
+fetch('/api/notify', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    type: 'task_assigned',
+    data: { taskTitle: title, assignees, assignedBy: userId },
+  }),
+});
     router.push('/tasks');
   }
 
