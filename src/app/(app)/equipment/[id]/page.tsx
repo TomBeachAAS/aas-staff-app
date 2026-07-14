@@ -1,15 +1,10 @@
 import { createClient } from '@/lib/supabase/server';
 import { redirect, notFound } from 'next/navigation';
-import loadDynamic from 'next/dynamic';
 import Link from 'next/link';
 import { Wrench, Truck, Pencil } from 'lucide-react';
+import { DetailWrapper } from './DetailWrapper';
 
 export const dynamic = 'force-dynamic';
-
-const EquipmentDetailClient = loadDynamic(
-  () => import('./EquipmentDetailClient').then(m => m.EquipmentDetailClient),
-  { ssr: false, loading: () => <div className="h-72 bg-gray-100 rounded-xl animate-pulse" /> }
-);
 
 export default async function EquipmentDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -52,10 +47,12 @@ export default async function EquipmentDetailPage({ params }: { params: Promise<
       </div>
 
       {item.description && (
-        <p className="text-sm text-gray-500 bg-white rounded-xl border border-gray-100 px-4 py-3">{item.description}</p>
+        <p className="text-sm text-gray-500 bg-white rounded-xl border border-gray-100 px-4 py-3">
+          {item.description}
+        </p>
       )}
 
-      <EquipmentDetailClient
+      <DetailWrapper
         item={{
           id: item.id,
           name: item.name,
