@@ -1,9 +1,8 @@
 'use client';
-
 import { useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { format, parseISO } from 'date-fns';
-import { ChevronLeft, ChevronRight, Lock, Check, Plus, AlertCircle, Send, ThumbsUp } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Check, Plus, AlertCircle, Send, ThumbsUp } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import type { TimesheetEntry, WorkingPattern } from '@/types/database';
 
@@ -18,6 +17,7 @@ interface Props {
   prevWeek: string;
   nextWeek: string;
   isLocked: boolean;
+  periodStatus: 'draft' | 'submitted' | 'approved';
   canEdit: boolean;
   isManagerView: boolean;
   weekLabel: string;
@@ -31,11 +31,10 @@ const LUNCH_BREAK_MINS = 60;
 
 export function TimesheetWeek({
   periodId, userId, currentUserId, days, entries,
-  workingPattern, weekStartStr, prevWeek, nextWeek, isLocked, canEdit,
+  workingPattern, weekStartStr, prevWeek, nextWeek, isLocked, periodStatus, canEdit,
   isManagerView, weekLabel,
 }: Props) {
   const router = useRouter();
-
   const [localEntries, setLocalEntries] = useState<Record<string, { start_time: string; end_time: string; notes: string }>>(() => {
     const map: Record<string, { start_time: string; end_time: string; notes: string }> = {};
     entries.forEach(e => {
@@ -47,24 +46,21 @@ export function TimesheetWeek({
     });
     return map;
   });
-
   const entryIds = useRef<Record<string, string>>(
     Object.fromEntries(entries.map(e => [e.work_date, (e as any).id]))
   );
-
   const [autoDays, setAutoDays] = useState<Set<string>>(() => {
     const set = new Set<string>();
     entries.forEach(e => { if ((e as any).is_auto_populated) set.add(e.work_date); });
     return set;
   });
-
   const [dirtyDays, setDirtyDays] = useState<Set<string>>(new Set());
   const [savedDays, setSavedDays] = useState<Set<string>>(new Set());
   const [saving, setSaving] = useState<string | null>(null);
   const [confirmingAll, setConfirmingAll] = useState(false);
   const [locked, setLocked] = useState(isLocked);
+  const [currentStatus, setCurrentStatus] = useState(periodStatus);
   const [locking, setLocking] = useState(false);
-
   const [expandedOffDays, setExpandedOffDays] = useState<Set<string>>(() => {
     const set = new Set<string>();
     entries.forEach(e => {
@@ -138,11 +134,9 @@ export function TimesheetWeek({
     const entry = localEntries[dateStr];
     if (!entry?.start_time || !entry?.end_time) return;
     if (grossMins(entry.start_time, entry.end_time) <= 0) return;
-
     setSaving(dateStr);
     const supabase = createClient();
     const existingId = entryIds.current[dateStr];
-
     if (existingId) {
       await supabase.from('timesheet_entries').update({
         start_time: entry.start_time,
@@ -166,12 +160,10 @@ export function TimesheetWeek({
         .single();
       if (newEntry) entryIds.current[dateStr] = (newEntry as any).id;
     }
-
     setAutoDays(prev => { const n = new Set(prev); n.delete(dateStr); return n; });
     setDirtyDays(prev => { const n = new Set(prev); n.delete(dateStr); return n; });
     setSavedDays(prev => new Set([...prev, dateStr]));
     setSaving(null);
-
     setTimeout(() => {
       setSavedDays(prev => { const n = new Set(prev); n.delete(dateStr); return n; });
     }, 2500);
@@ -195,22 +187,32 @@ export function TimesheetWeek({
     setLocking(true);
     const supabase = createClient();
 
+    // Auto-confirm any remaining auto-filled days
+    await supabase
+      .from('timesheet_entries')
+      .update({ is_auto_populated: false })
+      .eq('period_id', periodId)
+      .eq('is_auto_populated', true);
+    setAutoDays(new Set());
+
+    const newStatus = type === 'approve' ? 'approved' : 'submitted';
     await supabase
       .from('timesheet_periods')
-      .update({ is_locked: true })
+      .update({ is_locked: true, status: newStatus })
       .eq('id', periodId);
 
     await supabase.from('notifications').insert({
       user_id: userId,
       title: type === 'approve' ? 'Timesheet approved' : 'Timesheet submitted',
       body: type === 'approve'
-        ? `Your timesheet for ${weekLabel} has been approved by your manager.`
-        : `You submitted your timesheet for ${weekLabel}. Your manager will review it.`,
+        ? `Your timesheet for ${weekLabel} has been approved.`
+        : `Your timesheet for ${weekLabel} has been submitted.`,
       link: `/timesheets?week=${weekStartStr}`,
       read: false,
     });
 
     setLocked(true);
+    setCurrentStatus(newStatus);
     setLocking(false);
   }
 
@@ -241,17 +243,23 @@ export function TimesheetWeek({
         </button>
       </div>
 
-      {/* Locked / approved banner */}
+      {/* Status banner */}
       {locked && (
-        <div className="flex items-center gap-2 bg-green-50 border border-green-100 rounded-xl px-4 py-2.5 text-sm text-green-700">
+        <div className={`flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm ${
+          currentStatus === 'approved'
+            ? 'bg-green-50 border border-green-100 text-green-700'
+            : 'bg-blue-50 border border-blue-100 text-blue-700'
+        }`}>
           <Check size={14} />
-          {isManagerView
-            ? 'This timesheet has been approved.'
-            : 'Timesheet submitted — your manager will review it.'}
+          {currentStatus === 'approved'
+            ? 'Approved by manager.'
+            : isManagerView
+              ? 'Submitted — awaiting your approval.'
+              : 'Submitted — your manager will review it.'}
         </div>
       )}
 
-      {/* Submit / Approve button — shown above days so it's always visible */}
+      {/* Submit / Approve buttons */}
       {canSubmit && (
         <button
           onClick={() => lockPeriod('submit')}
@@ -277,7 +285,7 @@ export function TimesheetWeek({
       {!locked && canEdit && pendingAutoCount > 1 && (
         <div className="flex items-center justify-between bg-blue-50 border border-blue-100 rounded-xl px-4 py-2.5">
           <p className="text-sm text-blue-700">
-            {pendingAutoCount} days auto-filled — do the hours look right?
+            {pendingAutoCount} days auto-filled — hours look right? Just hit Submit.
           </p>
           <button
             onClick={confirmAll}
@@ -386,7 +394,6 @@ export function TimesheetWeek({
                   )}
                 </div>
               </div>
-
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <label className="text-xs text-gray-400">Start</label>
@@ -413,7 +420,6 @@ export function TimesheetWeek({
                   />
                 </div>
               </div>
-
               {canEdit && !locked && (isDirty || entry?.notes) && (
                 <div className="mt-2">
                   <input
@@ -425,7 +431,6 @@ export function TimesheetWeek({
                   />
                 </div>
               )}
-
               {!working && !entry && !isDirty && !locked && (
                 <button
                   onClick={() => setExpandedOffDays(prev => { const n = new Set(prev); n.delete(dateStr); return n; })}
@@ -439,7 +444,7 @@ export function TimesheetWeek({
         })}
       </div>
 
-      {/* Submit button — repeated at bottom for convenience */}
+      {/* Submit / Approve repeated at bottom */}
       {canSubmit && (
         <button
           onClick={() => lockPeriod('submit')}
