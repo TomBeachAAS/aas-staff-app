@@ -1,139 +1,118 @@
-'use client';
-import { useState, useEffect, useRef } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { createClient } from '@/lib/supabase/server';
+import { redirect, notFound } from 'next/navigation';
 import Link from 'next/link';
-import { createClient } from '@/lib/supabase/client';
-import { Navigation, MapPin, Crosshair, Check, Wrench, Truck, Pencil } from 'lucide-react';
-import { formatDistanceToNow } from 'date-fns';
+import Script from 'next/script';
+import { Wrench, Truck, Pencil } from 'lucide-react';
 
-export default function EquipmentDetailPage() {
-  const params = useParams();
-  const id = params.id as string;
-  const router = useRouter();
+export const dynamic = 'force-dynamic';
 
-  const [item, setItem] = useState<any>(null);
-  const [userId, setUserId] = useState('');
-  const [isManager, setIsManager] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const containerRef = useRef<HTMLDivElement>(null);
-  const mapRef = useRef<any>(null);
-  const markerRef = useRef<any>(null);
-  const dropPinModeRef = useRef(false);
-  const [lat, setLat] = useState<number | null>(null);
-  const [lng, setLng] = useState<number | null>(null);
-  const [updatedAt, setUpdatedAt] = useState<string | null>(null);
-  const [locatorName, setLocatorName] = useState<string | null>(null);
-  const [dropPinMode, setDropPinMode] = useState(false);
-  const [pendingLat, setPendingLat] = useState<number | null>(null);
-  const [pendingLng, setPendingLng] = useState<number | null>(null);
-  const [locationNotes, setLocationNotes] = useState('');
-  const [gpsLoading, setGpsLoading] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
-  const [error, setError] = useState('');
+export default async function EquipmentDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) redirect('/login');
+  const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
+  const isManager = ['administrator', 'manager'].includes(profile?.role ?? '');
+  const { data: item } = await supabase
+    .from('equipment')
+    .select('*, last_locator:last_located_by(full_name)')
+    .eq('id', id)
+    .single();
+  if (!item) notFound();
+  const locatorName: string | null = (item.last_locator as any)?.full_name ?? null;
+  const hasLocation = item.lat != null && item.lng != null;
 
-  useEffect(() => {
-    const load = async () => {
-      const supabase = createClient();
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) { router.push('/login'); return; }
-      setUserId(user.id);
-      const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
-      setIsManager(['administrator', 'manager'].includes(profile?.role ?? ''));
-      const { data } = await supabase
-        .from('equipment')
-        .select('*, last_locator:last_located_by(full_name)')
-        .eq('id', id)
-        .single();
-      if (!data) { router.push('/equipment'); return; }
-      setItem(data);
-      setLat(data.lat ?? null);
-      setLng(data.lng ?? null);
-      setUpdatedAt(data.location_updated_at ?? null);
-      setLocatorName((data.last_locator as any)?.full_name ?? null);
-      setLocationNotes(data.location_notes ?? '');
-      setLoading(false);
-    };
-    load();
-  }, [id]);
-
-  useEffect(() => { dropPinModeRef.current = dropPinMode; }, [dropPinMode]);
-
-  useEffect(() => {
-    if (!item || !containerRef.current || mapRef.current) return;
-    if (!document.querySelector('#leaflet-css')) {
-      const link = document.createElement('link');
-      link.id = 'leaflet-css';
-      link.rel = 'stylesheet';
-      link.href = 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css';
-      document.head.appendChild(link);
-    }
-    import('leaflet').then(({ default: L }) => {
-      delete (L.Icon.Default.prototype as any)._getIconUrl;
-      L.Icon.Default.mergeOptions({
-        iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon-2x.png',
-        iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon.png',
-        shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
-      });
-      const center: [number, number] = item.lat != null ? [item.lat, item.lng] : [52.5, -1.5];
-      const map = L.map(containerRef.current!).setView(center, item.lat != null ? 15 : 6);
-      mapRef.current = map;
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: 'OpenStreetMap' }).addTo(map);
-      if (item.lat != null) {
-        markerRef.current = L.marker([item.lat, item.lng]).addTo(map);
-      }
-      map.on('click', (e: any) => {
-        if (!dropPinModeRef.current) return;
-        const { lat: la, lng: ln } = e.latlng;
-        setPendingLat(la);
-        setPendingLng(ln);
-        if (markerRef.current) {
-          markerRef.current.setLatLng([la, ln]);
-        } else {
-          markerRef.current = L.marker([la, ln]).addTo(map);
-        }
-      });
+  const mapScript = `
+(function() {
+  var mc = document.getElementById('map-container');
+  if (!mc) return;
+  var itemId = mc.getAttribute('data-item-id');
+  var latStr = mc.getAttribute('data-lat');
+  var lngStr = mc.getAttribute('data-lng');
+  var initLat = latStr ? parseFloat(latStr) : null;
+  var initLng = lngStr ? parseFloat(lngStr) : null;
+  var pendingLat = null, pendingLng = null;
+  var dropPinMode = false;
+  var map = null, marker = null;
+  var cssLink = document.createElement('link');
+  cssLink.rel = 'stylesheet';
+  cssLink.href = 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css';
+  document.head.appendChild(cssLink);
+  var jsEl = document.createElement('script');
+  jsEl.src = 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js';
+  jsEl.onload = function() {
+    var L = window.L;
+    delete L.Icon.Default.prototype._getIconUrl;
+    L.Icon.Default.mergeOptions({
+      iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon-2x.png',
+      iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon.png',
+      shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png'
     });
-    return () => { mapRef.current?.remove(); mapRef.current = null; markerRef.current = null; };
-  }, [item]);
-
-  async function saveLocation(newLat: number, newLng: number) {
-    setSaving(true);
-    const supabase = createClient();
-    const now = new Date().toISOString();
-    await supabase.from('equipment').update({
-      lat: newLat, lng: newLng,
-      location_notes: locationNotes || null,
-      last_located_by: userId,
-      location_updated_at: now,
-    }).eq('id', id);
-    import('leaflet').then(({ default: L }) => {
-      if (!mapRef.current) return;
-      if (markerRef.current) {
-        markerRef.current.setLatLng([newLat, newLng]);
-      } else {
-        markerRef.current = L.marker([newLat, newLng]).addTo(mapRef.current);
-      }
-      mapRef.current.setView([newLat, newLng], 15);
+    var center = initLat !== null ? [initLat, initLng] : [52.5, -1.5];
+    map = L.map('map-container').setView(center, initLat !== null ? 15 : 6);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {attribution: 'OpenStreetMap'}).addTo(map);
+    if (initLat !== null) { marker = L.marker([initLat, initLng]).addTo(map); }
+    map.on('click', function(e) {
+      if (!dropPinMode) return;
+      pendingLat = e.latlng.lat; pendingLng = e.latlng.lng;
+      if (marker) { marker.setLatLng([pendingLat, pendingLng]); }
+      else { marker = L.marker([pendingLat, pendingLng]).addTo(map); }
+      document.getElementById('note-section').style.display = 'flex';
     });
-    setLat(newLat); setLng(newLng);
-    setUpdatedAt(now); setLocatorName('You');
-    setPendingLat(null); setPendingLng(null);
-    setDropPinMode(false); dropPinModeRef.current = false;
-    setSaving(false); setSaved(true);
-    setTimeout(() => setSaved(false), 3000);
-  }
-
-  function handleGPS() {
-    setError(''); setGpsLoading(true);
+  };
+  document.head.appendChild(jsEl);
+  document.getElementById('gps-btn').addEventListener('click', function() {
+    var btn = this; btn.textContent = 'Getting GPS...'; btn.disabled = true;
     navigator.geolocation.getCurrentPosition(
-      pos => { saveLocation(pos.coords.latitude, pos.coords.longitude); setGpsLoading(false); },
-      () => { setError('Could not get GPS. Check location permissions.'); setGpsLoading(false); },
-      { enableHighAccuracy: true, timeout: 15000 }
+      function(pos) { saveLocation(pos.coords.latitude, pos.coords.longitude, function() { btn.textContent = 'I am here'; btn.disabled = false; }); },
+      function() { showErr('Could not get GPS. Check location permissions.'); btn.textContent = 'I am here'; btn.disabled = false; },
+      {enableHighAccuracy: true, timeout: 15000}
     );
+  });
+  document.getElementById('pin-btn').addEventListener('click', function() {
+    dropPinMode = !dropPinMode;
+    this.textContent = dropPinMode ? 'Cancel' : 'Drop pin';
+    this.className = dropPinMode
+      ? 'flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-medium border bg-amber-50 border-amber-300 text-amber-700'
+      : 'flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-medium border border-gray-200 text-gray-600';
+    document.getElementById('drop-hint').style.display = dropPinMode ? 'block' : 'none';
+    if (!dropPinMode) { pendingLat = null; pendingLng = null; document.getElementById('note-section').style.display = 'none'; }
+  });
+  document.getElementById('save-btn').addEventListener('click', function() {
+    if (pendingLat === null) return;
+    var btn = this; btn.textContent = '...'; btn.disabled = true;
+    saveLocation(pendingLat, pendingLng, function() {
+      btn.textContent = 'Save'; btn.disabled = false;
+      pendingLat = null; pendingLng = null; dropPinMode = false;
+      document.getElementById('pin-btn').textContent = 'Drop pin';
+      document.getElementById('drop-hint').style.display = 'none';
+      document.getElementById('note-section').style.display = 'none';
+    });
+  });
+  function saveLocation(lat, lng, cb) {
+    var notes = document.getElementById('loc-note') ? document.getElementById('loc-note').value : '';
+    fetch('/api/equipment/' + itemId + '/location', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({lat: lat, lng: lng, notes: notes})
+    }).then(function(r) {
+      if (!r.ok) throw new Error('fail');
+      if (map && window.L) {
+        if (marker) { marker.setLatLng([lat, lng]); } else { marker = window.L.marker([lat, lng]).addTo(map); }
+        map.setView([lat, lng], 15);
+      }
+      var d = document.getElementById('dir-btn');
+      d.setAttribute('href', 'https://www.google.com/maps/dir/?api=1&destination=' + lat + ',' + lng);
+      d.style.display = 'flex';
+      var s = document.getElementById('loc-status');
+      s.textContent = 'Location saved'; s.style.color = '#16a34a'; s.style.display = 'block';
+      setTimeout(function() { s.style.color = ''; s.textContent = 'Updated just now'; }, 3000);
+      if (cb) cb();
+    }).catch(function() { showErr('Could not save location.'); if (cb) cb(); });
   }
-
-  if (loading) return <div className="p-8 text-center text-gray-400">Loading...</div>;
+  function showErr(msg) { var e = document.getElementById('err-msg'); e.textContent = msg; e.style.display = 'block'; }
+})();
+  `;
 
   return (
     <div className="p-4 space-y-4 max-w-2xl mx-auto">
@@ -155,86 +134,60 @@ export default function EquipmentDetailPage() {
           </Link>
         )}
       </div>
-
       {item.description && (
         <p className="text-sm text-gray-500 bg-white rounded-xl border border-gray-100 px-4 py-3">
           {item.description}
         </p>
       )}
-
       <div className="space-y-3">
         <div className="relative">
-          <div ref={containerRef} style={{ height: '300px', width: '100%', borderRadius: '12px' }} />
-          {dropPinMode && (
-            <div className="absolute top-3 left-1/2 -translate-x-1/2 z-10 bg-aas-blue text-white text-xs px-3 py-1.5 rounded-full shadow font-medium pointer-events-none">
-              Tap map to place pin
-            </div>
-          )}
-        </div>
-
-        {updatedAt && (
-          <p className="text-xs text-gray-400 text-center">
-            {saved
-              ? <span className="text-green-600">Location saved</span>
-              : <>Updated {formatDistanceToNow(new Date(updatedAt), { addSuffix: true })}{locatorName && ` by ${locatorName.split(' ')[0]}`}</>}
-          </p>
-        )}
-
-        {pendingLat != null && (
-          <div className="flex items-center gap-2 bg-white rounded-xl border border-gray-100 p-3">
-            <input
-              type="text"
-              value={locationNotes}
-              onChange={e => setLocationNotes(e.target.value)}
-              placeholder="Location note e.g. north field gate"
-              className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-aas-blue"
-            />
-            <button
-              onClick={() => saveLocation(pendingLat, pendingLng!)}
-              disabled={saving}
-              className="flex items-center gap-1.5 px-3 py-2 bg-aas-blue text-white rounded-lg text-sm font-medium disabled:opacity-60 shrink-0"
-            >
-              <Check size={14} />
-              {saving ? '...' : 'Save'}
-            </button>
+          <div
+            id="map-container"
+            data-item-id={id}
+            data-lat={item.lat?.toString() ?? ''}
+            data-lng={item.lng?.toString() ?? ''}
+            style={{ height: '300px', width: '100%', borderRadius: '12px' }}
+          />
+          <div id="drop-hint" style={{ display: 'none' }} className="absolute top-3 left-1/2 -translate-x-1/2 z-10 bg-aas-blue text-white text-xs px-3 py-1.5 rounded-full shadow font-medium pointer-events-none">
+            Tap map to place pin
           </div>
-        )}
-
-        <div className="grid grid-cols-2 gap-2">
-          <button
-            onClick={handleGPS}
-            disabled={gpsLoading || saving}
-            className="flex items-center justify-center gap-2 py-3 bg-aas-blue text-white rounded-xl text-sm font-medium disabled:opacity-60"
-          >
-            <Crosshair size={15} />
-            {gpsLoading ? 'Getting GPS...' : "I'm here"}
-          </button>
-          <button
-            onClick={() => { setDropPinMode(v => !v); setPendingLat(null); setPendingLng(null); }}
-            className={`flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-medium border transition-colors ${
-              dropPinMode ? 'bg-amber-50 border-amber-300 text-amber-700' : 'border-gray-200 text-gray-600 hover:bg-gray-50'
-            }`}
-          >
-            <MapPin size={15} />
-            {dropPinMode ? 'Cancel' : 'Drop pin'}
-          </button>
-          {lat != null && lng != null && (
-            
-              href={`https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="col-span-2 flex items-center justify-center gap-2 py-3 bg-green-600 text-white rounded-xl text-sm font-medium"
-            >
-              <Navigation size={15} />
-              Get directions
-            </a>
-          )}
         </div>
-
-        {error && <p className="text-sm text-red-500 text-center">{error}</p>}
+        <p id="loc-status" style={{ display: hasLocation ? 'block' : 'none' }} className="text-xs text-gray-400 text-center">
+          {item.location_updated_at ? `Last updated${locatorName ? ' by ' + locatorName.split(' ')[0] : ''}` : ''}
+        </p>
+        <div id="note-section" style={{ display: 'none' }} className="flex items-center gap-2 bg-white rounded-xl border border-gray-100 p-3">
+          <input
+            id="loc-note"
+            type="text"
+            placeholder="Location note e.g. north field gate"
+            className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none"
+          />
+          <button id="save-btn" className="px-3 py-2 bg-aas-blue text-white rounded-lg text-sm font-medium">
+            Save
+          </button>
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <button id="gps-btn" className="flex items-center justify-center gap-2 py-3 bg-aas-blue text-white rounded-xl text-sm font-medium">
+            I am here
+          </button>
+          <button id="pin-btn" className="flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-medium border border-gray-200 text-gray-600">
+            Drop pin
+          </button>
+          
+            id="dir-btn"
+            href={hasLocation ? `https://www.google.com/maps/dir/?api=1&destination=${item.lat},${item.lng}` : '#'}
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{ display: hasLocation ? 'flex' : 'none' }}
+            className="col-span-2 flex items-center justify-center gap-2 py-3 bg-green-600 text-white rounded-xl text-sm font-medium"
+          >
+            Get directions
+          </a>
+        </div>
+        <p id="err-msg" style={{ display: 'none' }} className="text-sm text-red-500 text-center" />
       </div>
-
       <Link href="/equipment" className="text-sm text-aas-blue hover:underline">Back to equipment</Link>
+      <Script id="eq-map" strategy="afterInteractive" dangerouslySetInnerHTML={{ __html: mapScript }} />
     </div>
   );
 }
