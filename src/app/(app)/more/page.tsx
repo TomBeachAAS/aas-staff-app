@@ -3,7 +3,7 @@ import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import {
   Users, Building2, MapPin, Truck, Clock, Receipt,
-  Navigation, BarChart3, Settings, Bell, LogOut, Stethoscope, UserCircle, Wrench
+  Navigation, BarChart3, Settings, Bell, LogOut, Stethoscope, UserCircle, Wrench, Umbrella
 } from 'lucide-react';
 import { logout } from '@/lib/auth-actions';
 
@@ -21,6 +21,7 @@ export default async function MorePage() {
     {
       title: 'General',
       items: [
+        { href: '/holidays', icon: Umbrella, label: 'Holidays' },
         { href: '/sickness', icon: Stethoscope, label: 'Sickness' },
         { href: '/equipment', icon: Wrench, label: 'Equipment' },
         { href: '/notifications', icon: Bell, label: 'Notifications' },
@@ -33,7 +34,6 @@ export default async function MorePage() {
         { href: '/staff', icon: Users, label: 'Staff' },
         { href: '/customers', icon: Building2, label: 'Customers' },
         { href: '/locations', icon: MapPin, label: 'Locations' },
-        { href: '/vehicles', icon: Truck, label: 'Vehicles' },
       ],
     }] : []),
     {
