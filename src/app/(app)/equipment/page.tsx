@@ -18,6 +18,7 @@ export default async function EquipmentPage() {
   const { data: items } = await supabase
     .from('equipment')
     .select('*, last_locator:last_located_by(full_name)')
+    .eq('is_active', true)
     .order('name');
 
   const equipment = items ?? [];
@@ -49,6 +50,7 @@ export default async function EquipmentPage() {
           const updatedAt = item.location_updated_at
             ? format(new Date(item.location_updated_at), 'd MMM, HH:mm')
             : null;
+          const subtitle = [item.make, item.model, item.year].filter(Boolean).join(' ');
           return (
             <Link
               key={item.id}
@@ -61,7 +63,15 @@ export default async function EquipmentPage() {
                   : <Wrench size={16} className="text-aas-blue" />}
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-gray-800">{item.name}</p>
+                <div className="flex items-center gap-2">
+                  <p className="text-sm font-medium text-gray-800 truncate">{item.name}</p>
+                  {item.type && (
+                    <span className={'text-xs px-1.5 py-0.5 rounded font-medium shrink-0 ' + (item.type === 'vehicle' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700')}>
+                      {item.type}
+                    </span>
+                  )}
+                </div>
+                {subtitle && <p className="text-xs text-gray-500 truncate">{subtitle}</p>}
                 {hasLocation && updatedAt
                   ? <p className="text-xs text-gray-400">Updated {updatedAt}{locator ? ' by ' + locator : ''}</p>
                   : <p className="text-xs text-gray-300">No location set</p>}
