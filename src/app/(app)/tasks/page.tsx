@@ -19,18 +19,21 @@ const PRIORITY_COLOURS: Record<string, string> = {
 export default async function TasksPage({
   searchParams,
 }: {
-  searchParams: Promise<{ status?: string; mine?: string }>;
+  searchParams: Promise<{ status?: string }>;
 }) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect('/login');
 
   const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
+  const isManagerOrAdmin = ['administrator', 'manager'].includes(profile?.role ?? '');
   const sp = await searchParams;
-  const statusFilter = sp.status ?? 'active';
   const today = format(new Date(), 'yyyy-MM-dd');
 
-  // Tasks I'm assigned to or created
+  // Default: employees see their own tasks, managers see all
+  const statusFilter = sp.status ?? (isManagerOrAdmin ? 'active' : 'mine');
+
+  // Tasks I'm assigned to
   const { data: assignedTaskIds } = await supabase
     .from('task_assignees')
     .select('task_id')
@@ -39,10 +42,19 @@ export default async function TasksPage({
 
   let query = supabase
     .from('tasks')
-.select('*, assignees:task_assignees(user_id, user:profiles!task_assignees_user_id_fkey(full_name)), customer:customers(company_name), location:locations(name, address_line1, postcode, latitude, longitude), created_by_profile:profiles!tasks_created_by_fkey(full_name)')    .order('task_date', { ascending: true, nullsFirst: false })
+    .select('*, assignees:task_assignees(user_id, user:profiles!task_assignees_user_id_fkey(full_name)), customer:customers(company_name), location:locations(name, address_line1, postcode, latitude, longitude), created_by_profile:profiles!tasks_created_by_fkey(full_name)')
+    .order('task_date', { ascending: true, nullsFirst: false })
     .order('created_at', { ascending: false });
 
-  if (statusFilter === 'active') {
+  if (statusFilter === 'mine') {
+    // Show only tasks assigned to me that are not completed/cancelled
+    if (myTaskIds.length > 0) {
+      query = query.in('id', myTaskIds).not('status', 'in', '("completed","cancelled")');
+    } else {
+      // No assigned tasks — return empty result by using an impossible filter
+      query = query.eq('id', '00000000-0000-0000-0000-000000000000');
+    }
+  } else if (statusFilter === 'active') {
     query = query.not('status', 'in', '("completed","cancelled")');
   } else if (statusFilter === 'completed') {
     query = query.eq('status', 'completed');
@@ -50,7 +62,7 @@ export default async function TasksPage({
     query = query.not('status', 'in', '("completed","cancelled")').lt('task_date', today);
   }
 
-const { data: tasks, error: tasksError } = await query.limit(100);
+  const { data: tasks, error: tasksError } = await query.limit(100);
 
   const overdueTasks = (tasks ?? []).filter(t => t.task_date && t.task_date < today && !['completed', 'cancelled'].includes(t.status));
   const todayTasks = (tasks ?? []).filter(t => t.task_date === today);
@@ -92,6 +104,13 @@ const { data: tasks, error: tasksError } = await query.limit(100);
     );
   }
 
+  const tabs = [
+    { key: 'mine', label: 'My tasks' },
+    ...(isManagerOrAdmin ? [{ key: 'active', label: 'All active' }] : []),
+    { key: 'overdue', label: 'Overdue' },
+    { key: 'completed', label: 'Completed' },
+  ];
+
   return (
     <div className="p-4 space-y-4 max-w-3xl mx-auto">
       <div className="flex items-center justify-between">
@@ -106,17 +125,13 @@ const { data: tasks, error: tasksError } = await query.limit(100);
       </div>
 
       {/* Filter tabs */}
-      <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
-        {[
-          { key: 'active', label: 'Active' },
-          { key: 'overdue', label: 'Overdue' },
-          { key: 'completed', label: 'Completed' },
-        ].map(({ key, label }) => (
+      <div className="flex gap-1 bg-gray-100 rounded-lg p-1 overflow-x-auto">
+        {tabs.map(({ key, label }) => (
           <Link
             key={key}
             href={`/tasks?status=${key}`}
             className={cn(
-              'flex-1 text-center py-1.5 rounded-md text-xs font-medium transition-colors',
+              'flex-1 text-center py-1.5 rounded-md text-xs font-medium transition-colors whitespace-nowrap px-2',
               statusFilter === key ? 'bg-white text-aas-blue shadow-sm' : 'text-gray-500'
             )}
           >
@@ -126,12 +141,12 @@ const { data: tasks, error: tasksError } = await query.limit(100);
       </div>
 
       {tasksError && (
-  <div className="p-3 rounded-lg bg-red-50 text-sm text-red-700 font-mono break-all">
-    {tasksError.message}
-  </div>
-)}
+        <div className="p-3 rounded-lg bg-red-50 text-sm text-red-700 font-mono break-all">
+          {tasksError.message}
+        </div>
+      )}
 
-      {statusFilter === 'active' && (
+      {(statusFilter === 'active' || statusFilter === 'mine') && (
         <>
           {overdueTasks.length > 0 && (
             <Card>
@@ -158,12 +173,14 @@ const { data: tasks, error: tasksError } = await query.limit(100);
             </Card>
           )}
           {tasks?.length === 0 && (
-            <div className="text-center py-12 text-sm text-gray-400">No active tasks</div>
+            <div className="text-center py-12 text-sm text-gray-400">
+              {statusFilter === 'mine' ? 'No tasks assigned to you' : 'No active tasks'}
+            </div>
           )}
         </>
       )}
 
-      {statusFilter !== 'active' && (
+      {statusFilter !== 'active' && statusFilter !== 'mine' && (
         <Card>
           <div className="divide-y divide-gray-50">
             {(tasks ?? []).length === 0 ? (
