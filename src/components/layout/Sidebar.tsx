@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
-  LayoutDashboard, Calendar, Umbrella, Stethoscope, CheckSquare,
+  Wrench, LayoutDashboard, Calendar, Umbrella, Stethoscope, CheckSquare,
   ClipboardList, Users, Building2, MapPin, Truck, Clock, Receipt,
   Navigation, BarChart3, Settings, Bell, LogOut, ChevronLeft, ChevronRight, UserCircle
 } from 'lucide-react';
