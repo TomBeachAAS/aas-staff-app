@@ -2,7 +2,7 @@ import { createClient } from '@/lib/supabase/server';
 import { redirect, notFound } from 'next/navigation';
 import Link from 'next/link';
 import { Wrench, Truck, Pencil } from 'lucide-react';
-import { DetailWrapper } from './DetailWrapper';
+import { DetailWrapper } from '@/components/equipment/DetailWrapper';
 
 export const dynamic = 'force-dynamic';
 
