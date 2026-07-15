@@ -4,8 +4,8 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
   Wrench, LayoutDashboard, Calendar, Umbrella, Stethoscope, CheckSquare,
-  ClipboardList, Users, Building2, MapPin, Truck, Clock, Receipt,
-  Navigation, BarChart3, Settings, Bell, LogOut, ChevronLeft, ChevronRight, UserCircle
+  ClipboardList, Users, Building2, MapPin, Clock, Receipt,
+  Navigation, BarChart3, Settings, Bell, LogOut, ChevronLeft, ChevronRight, UserCircle, Briefcase
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { logout } from '@/lib/auth-actions';
@@ -18,6 +18,7 @@ const navItems = [
   { href: '/holidays', icon: Umbrella, label: 'Holidays' },
   { href: '/sickness', icon: Stethoscope, label: 'Sickness' },
   { href: '/tasks', icon: CheckSquare, label: 'Tasks' },
+  { href: '/jobs', icon: Briefcase, label: 'Jobs' },
   { href: '/equipment', icon: Wrench, label: 'Equipment' },
 ];
 
@@ -25,7 +26,6 @@ const managerItems = [
   { href: '/staff', icon: Users, label: 'Staff' },
   { href: '/customers', icon: Building2, label: 'Customers' },
   { href: '/locations', icon: MapPin, label: 'Locations' },
-  { href: '/vehicles', icon: Truck, label: 'Vehicles' },
 ];
 
 const adminItems = [
