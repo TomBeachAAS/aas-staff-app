@@ -86,6 +86,7 @@ export default async function EquipmentDetailPage({ params }: { params: Promise<
             Drop pin
           </button>
           
+          <a
             id="dir-btn"
             href={dirHref}
             target="_blank"
