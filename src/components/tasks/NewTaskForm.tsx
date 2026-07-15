@@ -12,12 +12,12 @@ interface Props {
   staff: { id: string; full_name: string }[];
   customers: { id: string; company_name: string }[];
   locations: { id: string; name: string }[];
-  vehicles: { id: string; name: string; registration: string | null }[];
+  equipment: { id: string; name: string; type: string | null; registration: string | null }[];
 }
 
 const JOB_TYPES = ['RaaS', 'Service', 'Demo', 'Delivery', 'Mapping', 'Consultancy'];
 
-export function NewTaskForm({ userId, initialDate, staff, customers: initialCustomers, locations: initialLocations, vehicles: initialVehicles }: Props) {
+export function NewTaskForm({ userId, initialDate, staff, customers: initialCustomers, locations: initialLocations, equipment: initialEquipment }: Props) {
   const router = useRouter();
 
   const [title, setTitle] = useState('');
@@ -30,7 +30,7 @@ export function NewTaskForm({ userId, initialDate, staff, customers: initialCust
   const [jobType, setJobType] = useState('');
   const [customerId, setCustomerId] = useState('');
   const [locationId, setLocationId] = useState('');
-  const [vehicleId, setVehicleId] = useState('');
+  const [equipmentId, setEquipmentId] = useState('');
   const [notes, setNotes] = useState('');
   const [assignees, setAssignees] = useState<string[]>([userId]);
   const [autoRollover, setAutoRollover] = useState(true);
@@ -39,7 +39,7 @@ export function NewTaskForm({ userId, initialDate, staff, customers: initialCust
 
   const [customers, setCustomers] = useState(initialCustomers);
   const [locations, setLocations] = useState(initialLocations);
-  const [vehicles, setVehicles] = useState(initialVehicles);
+  const [equipment, setEquipment] = useState(initialEquipment);
 
   // New customer modal
   const [showNewCustomer, setShowNewCustomer] = useState(false);
@@ -59,13 +59,13 @@ export function NewTaskForm({ userId, initialDate, staff, customers: initialCust
   const [savingLocation, setSavingLocation] = useState(false);
   const [locationError, setLocationError] = useState('');
 
-  // New machine modal
-  const [showNewVehicle, setShowNewVehicle] = useState(false);
-  const [newVehicleName, setNewVehicleName] = useState('');
-  const [newVehicleReg, setNewVehicleReg] = useState('');
-  const [newVehicleType, setNewVehicleType] = useState('');
-  const [savingVehicle, setSavingVehicle] = useState(false);
-  const [vehicleError, setVehicleError] = useState('');
+  // New equipment modal
+  const [showNewEquipment, setShowNewEquipment] = useState(false);
+  const [newEqName, setNewEqName] = useState('');
+  const [newEqType, setNewEqType] = useState<'machine' | 'vehicle'>('machine');
+  const [newEqReg, setNewEqReg] = useState('');
+  const [savingEquipment, setSavingEquipment] = useState(false);
+  const [equipmentError, setEquipmentError] = useState('');
 
   function toggleAssignee(id: string) {
     setAssignees(prev => prev.includes(id) ? prev.filter(a => a !== id) : [...prev, id]);
@@ -109,22 +109,24 @@ export function NewTaskForm({ userId, initialDate, staff, customers: initialCust
     setSavingLocation(false);
   }
 
-  async function saveNewVehicle() {
-    if (!newVehicleName.trim()) { setVehicleError('Name is required.'); return; }
-    setSavingVehicle(true); setVehicleError('');
-    const supabase = createClient();
-    const { data, error: err } = await supabase.from('vehicles').insert({
-      name: newVehicleName.trim(),
-      registration: newVehicleReg || null,
-      type: newVehicleType || null,
-      is_active: true,
-    }).select('id, name, registration').single();
-    if (err || !data) { setVehicleError(err?.message ?? 'Failed to save'); setSavingVehicle(false); return; }
-    setVehicles(prev => [...prev, data].sort((a, b) => a.name.localeCompare(b.name)));
-    setVehicleId(data.id);
-    setShowNewVehicle(false);
-    setNewVehicleName(''); setNewVehicleReg(''); setNewVehicleType('');
-    setSavingVehicle(false);
+  async function saveNewEquipment() {
+    if (!newEqName.trim()) { setEquipmentError('Name is required.'); return; }
+    setSavingEquipment(true); setEquipmentError('');
+    try {
+      const res = await fetch('/api/equipment', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: newEqName.trim(), type: newEqType, registration: newEqReg || null }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setEquipmentError(data.error ?? 'Failed to save'); setSavingEquipment(false); return; }
+      const newItem = { id: data.id, name: newEqName.trim(), type: newEqType, registration: newEqReg || null };
+      setEquipment(prev => [...prev, newItem].sort((a, b) => a.name.localeCompare(b.name)));
+      setEquipmentId(data.id);
+      setShowNewEquipment(false);
+      setNewEqName(''); setNewEqReg('');
+      setSavingEquipment(false);
+    } catch { setEquipmentError('Network error'); setSavingEquipment(false); }
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -143,8 +145,8 @@ export function NewTaskForm({ userId, initialDate, staff, customers: initialCust
       status: 'not_started',
       customer_id: customerId || null,
       location_id: locationId || null,
-      vehicle_id: vehicleId || null,
-      notes: [jobType ? `Job type: ${jobType}` : '', notes].filter(Boolean).join('\n') || null,
+      equipment_id: equipmentId || null,
+      notes: [jobType ? 'Job type: ' + jobType : '', notes].filter(Boolean).join('\n') || null,
       auto_rollover: autoRollover,
       created_by: userId,
     }).select().single();
@@ -165,15 +167,13 @@ export function NewTaskForm({ userId, initialDate, staff, customers: initialCust
         return;
       }
     }
-// Notify assignees (excluding the creator)
-fetch('/api/notify', {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({
-    type: 'task_assigned',
-    data: { taskTitle: title, assignees, assignedBy: userId },
-  }),
-});
+
+    fetch('/api/notify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type: 'task_assigned', data: { taskTitle: title, assignees, assignedBy: userId } }),
+    });
+
     router.push('/tasks');
   }
 
@@ -191,7 +191,7 @@ fetch('/api/notify', {
 
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
-          <textarea value={description} onChange={e => setDescription(e.target.value)} rows={3} className={`${inputClass} resize-none`} />
+          <textarea value={description} onChange={e => setDescription(e.target.value)} rows={3} className={inputClass + ' resize-none'} />
         </div>
 
         <div>
@@ -199,9 +199,8 @@ fetch('/api/notify', {
           <div className="flex flex-wrap gap-2">
             {JOB_TYPES.map(type => (
               <button key={type} type="button" onClick={() => setJobType(jobType === type ? '' : type)}
-                className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
-                  jobType === type ? 'bg-aas-blue text-white border-aas-blue' : 'bg-white text-gray-600 border-gray-300 hover:border-aas-blue hover:text-aas-blue'
-                }`}>
+                className={'px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ' +
+                  (jobType === type ? 'bg-aas-blue text-white border-aas-blue' : 'bg-white text-gray-600 border-gray-300 hover:border-aas-blue hover:text-aas-blue')}>
                 {type}
               </button>
             ))}
@@ -272,18 +271,22 @@ fetch('/api/notify', {
           </select>
         </div>
 
-        {/* Machine */}
+        {/* Vehicle / Equipment */}
         <div>
           <div className="flex items-center justify-between mb-1">
-            <label className="text-sm font-medium text-gray-700">Machine</label>
-            <button type="button" onClick={() => { setShowNewVehicle(true); setVehicleError(''); }}
+            <label className="text-sm font-medium text-gray-700">Vehicle / Equipment</label>
+            <button type="button" onClick={() => { setShowNewEquipment(true); setEquipmentError(''); }}
               className="flex items-center gap-1 text-xs text-aas-blue hover:underline">
               <Plus size={12} /> Add new
             </button>
           </div>
-          <select value={vehicleId} onChange={e => setVehicleId(e.target.value)} className={inputClass}>
+          <select value={equipmentId} onChange={e => setEquipmentId(e.target.value)} className={inputClass}>
             <option value="">— none —</option>
-            {vehicles.map(v => <option key={v.id} value={v.id}>{v.name}{v.registration ? ` (${v.registration})` : ''}</option>)}
+            {equipment.map(eq => (
+              <option key={eq.id} value={eq.id}>
+                {eq.name}{eq.registration ? ' (' + eq.registration + ')' : ''}
+              </option>
+            ))}
           </select>
         </div>
 
@@ -304,7 +307,7 @@ fetch('/api/notify', {
 
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
-          <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2} className={`${inputClass} resize-none`} />
+          <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2} className={inputClass + ' resize-none'} />
         </div>
 
         <label className="flex items-center gap-2 cursor-pointer select-none">
@@ -401,34 +404,44 @@ fetch('/api/notify', {
         </div>
       )}
 
-      {/* New Machine Modal */}
-      {showNewVehicle && (
+      {/* New Equipment Modal */}
+      {showNewEquipment && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
-          <div className="absolute inset-0 bg-black/40" onClick={() => setShowNewVehicle(false)} />
+          <div className="absolute inset-0 bg-black/40" onClick={() => setShowNewEquipment(false)} />
           <div className="relative w-full sm:max-w-sm bg-white rounded-t-2xl sm:rounded-2xl shadow-xl">
             <div className="flex items-center justify-between px-4 pt-4 pb-3 border-b border-gray-100">
-              <h3 className="text-base font-bold text-gray-800">New machine</h3>
-              <button onClick={() => setShowNewVehicle(false)} className="p-1 rounded-lg hover:bg-gray-100"><X size={18} /></button>
+              <h3 className="text-base font-bold text-gray-800">Add vehicle / equipment</h3>
+              <button onClick={() => setShowNewEquipment(false)} className="p-1 rounded-lg hover:bg-gray-100"><X size={18} /></button>
             </div>
             <div className="p-4 space-y-3">
-              {vehicleError && <div className="p-2 rounded-lg bg-red-50 text-sm text-red-700">{vehicleError}</div>}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Machine name *</label>
-                <input value={newVehicleName} onChange={e => setNewVehicleName(e.target.value)} placeholder="e.g. Sprayer 1" className={inputClass} autoFocus />
+              {equipmentError && <div className="p-2 rounded-lg bg-red-50 text-sm text-red-700">{equipmentError}</div>}
+              <div className="grid grid-cols-2 gap-2">
+                {(['machine', 'vehicle'] as const).map(t => (
+                  <button key={t} type="button" onClick={() => setNewEqType(t)}
+                    className={'py-2 rounded-lg text-sm font-medium border-2 transition-colors ' +
+                      (newEqType === t ? 'border-aas-blue bg-aas-blue text-white' : 'border-gray-200 text-gray-500')}>
+                    {t === 'machine' ? 'Machine' : 'Vehicle'}
+                  </button>
+                ))}
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Type</label>
-                <input value={newVehicleType} onChange={e => setNewVehicleType(e.target.value)} placeholder="e.g. Drone, Tractor, Robot" className={inputClass} />
+                <label className="block text-sm font-medium text-gray-700 mb-1">Name *</label>
+                <input value={newEqName} onChange={e => setNewEqName(e.target.value)}
+                  placeholder={newEqType === 'vehicle' ? 'e.g. Transit Van 1' : 'e.g. Robotti 150F #1'}
+                  className={inputClass} autoFocus />
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Serial / Registration</label>
-                <input value={newVehicleReg} onChange={e => setNewVehicleReg(e.target.value)} placeholder="Optional" className={inputClass} />
-              </div>
+              {newEqType === 'vehicle' && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Registration</label>
+                  <input value={newEqReg} onChange={e => setNewEqReg(e.target.value)} placeholder="e.g. AB12 CDE" className={inputClass} />
+                </div>
+              )}
+              <p className="text-xs text-gray-400">You can add make, model, year and more from the Equipment page.</p>
             </div>
             <div className="flex gap-3 px-4 pb-4">
-              <button type="button" onClick={() => setShowNewVehicle(false)} className="flex-1 py-2.5 border border-gray-200 rounded-lg text-sm text-gray-600">Cancel</button>
-              <button type="button" onClick={saveNewVehicle} disabled={savingVehicle} className="flex-1 py-2.5 bg-aas-blue text-white rounded-lg text-sm font-medium disabled:opacity-60">
-                {savingVehicle ? 'Saving…' : 'Save machine'}
+              <button type="button" onClick={() => setShowNewEquipment(false)} className="flex-1 py-2.5 border border-gray-200 rounded-lg text-sm text-gray-600">Cancel</button>
+              <button type="button" onClick={saveNewEquipment} disabled={savingEquipment} className="flex-1 py-2.5 bg-aas-blue text-white rounded-lg text-sm font-medium disabled:opacity-60">
+                {savingEquipment ? 'Saving…' : 'Save'}
               </button>
             </div>
           </div>
