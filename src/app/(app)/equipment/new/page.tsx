@@ -66,7 +66,7 @@ export default function NewEquipmentPage() {
           </div>
           <p className="text-xs text-gray-400">
             {type === 'machine'
-              ? 'Tractors, robots, drones, sprayers, telehandlers, tools…'
+              ? 'Tractors, robots, drones, sprayers, telehandlers...'
               : 'Cars, vans, trucks that drive on public roads'}
           </p>
         </div>
@@ -86,7 +86,7 @@ export default function NewEquipmentPage() {
             </div>
             <div>
               <label className={lbl}>Model</label>
-              <input name="model" placeholder={type === 'vehicle' ? 'Transit Custom' : 'Robotti 150F'} className={inp} />
+              <input name="model" placeholder={type === 'vehicle' ? 'Transit' : 'Robotti 150F'} className={inp} />
             </div>
           </div>
           <div>
@@ -96,7 +96,7 @@ export default function NewEquipmentPage() {
           {type === 'vehicle' ? (
             <div>
               <label className={lbl}>Registration</label>
-              <input name="registration" placeholder="e.g. AB12 CDE" className={inp} style={{textTransform:'uppercase'}} />
+              <input name="registration" placeholder="e.g. AB12 CDE" className={inp} />
             </div>
           ) : (
             <div>
@@ -108,12 +108,12 @@ export default function NewEquipmentPage() {
 
         <div className="bg-white rounded-xl border border-gray-100 p-4">
           <label className={lbl}>Notes</label>
-          <textarea name="notes" rows={3} placeholder="Any additional info, colour, attachments…" className={inp} />
+          <textarea name="notes" rows={3} placeholder="Colour, attachments, any other details..." className={inp} />
         </div>
 
         <button type="submit" disabled={pending}
           className="w-full py-3 bg-aas-blue text-white rounded-xl text-sm font-semibold disabled:opacity-60">
-          {pending ? 'Saving…' : 'Add ' + (type === 'machine' ? 'machine' : 'vehicle')}
+          {pending ? 'Saving...' : 'Add ' + (type === 'machine' ? 'machine' : 'vehicle')}
         </button>
       </form>
     </div>
