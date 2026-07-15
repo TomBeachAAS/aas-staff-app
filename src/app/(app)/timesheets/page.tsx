@@ -22,6 +22,9 @@ export default async function TimesheetsPage({
   const { data: profile } = await supabase.from('profiles').select('*').eq('id', user.id).single();
   if (!profile?.timesheet_access) redirect('/dashboard');
 
+  // Compute role before allowing user param override
+  const isManagerOrAdmin = ['administrator', 'manager'].includes(profile.role);
+
   const sp = await searchParams;
   const weekStart = sp.week
     ? new Date(sp.week + 'T12:00:00')
@@ -31,7 +34,8 @@ export default async function TimesheetsPage({
   const weekStartStr = format(weekStart, 'yyyy-MM-dd');
   const weekEndStr = format(weekEnd, 'yyyy-MM-dd');
 
-  const viewUserId = sp.user ?? user.id;
+  // Only managers/admins can view other users' timesheets
+  const viewUserId = (sp.user && isManagerOrAdmin) ? sp.user : user.id;
 
   // Get or create timesheet period (retry after failed insert handles unique-constraint races)
   const { data: existing } = await supabase
@@ -150,66 +154,66 @@ export default async function TimesheetsPage({
     }
   }
 
-  const isManagerOrAdmin = ['administrator', 'manager'].includes(profile.role);
   let staffOverview: Array<{ userId: string; name: string; status: 'not_started' | 'draft' | 'submitted' | 'approved' }> = [];
 
-if (isManagerOrAdmin) {
-  const { data: allProfiles } = await supabase
-    .from('profiles')
-    .select('id, full_name')
-    .order('full_name');
+  if (isManagerOrAdmin) {
+    const { data: allProfiles } = await supabase
+      .from('profiles')
+      .select('id, full_name')
+      .order('full_name');
 
-  if (allProfiles?.length) {
-    const { data: weekPeriods } = await supabase
-      .from('timesheet_periods')
-      .select('user_id, status, is_locked')
-      .eq('period_start', weekStartStr)
-      .in('user_id', allProfiles.map(p => p.id));
+    if (allProfiles?.length) {
+      const { data: weekPeriods } = await supabase
+        .from('timesheet_periods')
+        .select('user_id, status, is_locked')
+        .eq('period_start', weekStartStr)
+        .in('user_id', allProfiles.map(p => p.id));
 
-    const periodMap = new Map((weekPeriods ?? []).map(p => [p.user_id, p]));
+      const periodMap = new Map((weekPeriods ?? []).map(p => [p.user_id, p]));
 
-    staffOverview = allProfiles.map(p => {
-      const period = periodMap.get(p.id);
-      let status: 'not_started' | 'draft' | 'submitted' | 'approved' = 'not_started';
-      if (period) status = (period.status as any) ?? (period.is_locked ? 'submitted' : 'draft');
-      return { userId: p.id, name: p.full_name, status };
-    });
+      staffOverview = allProfiles.map(p => {
+        const period = periodMap.get(p.id);
+        let status: 'not_started' | 'draft' | 'submitted' | 'approved' = 'not_started';
+        if (period) status = (period.status as any) ?? (period.is_locked ? 'submitted' : 'draft');
+        return { userId: p.id, name: p.full_name, status };
+      });
+    }
   }
-}
+
   const isLocked = period?.is_locked ?? false;
   const canEdit = (!isLocked || isManagerOrAdmin) && (viewUserId === user.id || isManagerOrAdmin);
 
   const prevWeek = format(addWeeks(weekStart, -1), 'yyyy-MM-dd');
   const nextWeek = format(addWeeks(weekStart, 1), 'yyyy-MM-dd');
 
- return (
-  <div className="p-4 space-y-4 max-w-3xl mx-auto">
-    <h2 className="text-lg font-bold text-gray-800">Timesheets</h2>
+  return (
+    <div className="p-4 space-y-4 max-w-3xl mx-auto">
+      <h2 className="text-lg font-bold text-gray-800">Timesheets</h2>
 
-    {isManagerOrAdmin && staffOverview.length > 0 && (
-      <TimesheetStaffOverview
-        staff={staffOverview}
-        weekStartStr={weekStartStr}
+      {isManagerOrAdmin && staffOverview.length > 0 && (
+        <TimesheetStaffOverview
+          staff={staffOverview}
+          weekStartStr={weekStartStr}
+          currentUserId={user.id}
+        />
+      )}
+
+      <TimesheetWeek
+        periodId={period?.id ?? ''}
+        userId={viewUserId}
         currentUserId={user.id}
+        days={days.map(d => format(d, 'yyyy-MM-dd'))}
+        entries={entries ?? []}
+        workingPattern={workingPattern}
+        weekStartStr={weekStartStr}
+        prevWeek={prevWeek}
+        nextWeek={nextWeek}
+        isLocked={isLocked}
+        periodStatus={(period as any)?.status ?? 'draft'}
+        canEdit={canEdit}
+        isManagerView={viewUserId !== user.id && isManagerOrAdmin}
+        weekLabel={`${format(weekStart, 'd MMM')} – ${format(weekEnd, 'd MMM yyyy')}`}
       />
-    )}
-
-    <TimesheetWeek
-      periodId={period?.id ?? ''}
-      userId={viewUserId}
-      currentUserId={user.id}
-      days={days.map(d => format(d, 'yyyy-MM-dd'))}
-      entries={entries ?? []}
-      workingPattern={workingPattern}
-      weekStartStr={weekStartStr}
-      prevWeek={prevWeek}
-      nextWeek={nextWeek}
-      isLocked={isLocked}
-      periodStatus={(period as any)?.status ?? 'draft'}
-      canEdit={canEdit}
-      isManagerView={viewUserId !== user.id && isManagerOrAdmin}
-      weekLabel={`${format(weekStart, 'd MMM')} – ${format(weekEnd, 'd MMM yyyy')}`}
-    />
-  </div>
-);
-  }
+    </div>
+  );
+}
