@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, type ElementType } from 'react';
 import {
   format, startOfMonth, endOfMonth, startOfYear,
-  subMonths, differenceInCalendarDays,
+  subMonths,
 } from 'date-fns';
 import {
   Clock, Umbrella, AlertCircle, CheckSquare,
@@ -38,6 +38,29 @@ const PRESETS: { key: DatePreset; label: string }[] = [
   { key: 'year', label: 'This Year' },
   { key: 'custom', label: 'Custom' },
 ];
+
+/** Count working days (Mon–Fri) between two dates, clamped to the report range */
+function workingDaysInRange(
+  start_date: string,
+  end_date: string | null,
+  rangeStart: string,
+  rangeEnd: string
+): number {
+  const s = new Date(Math.max(new Date(start_date).getTime(), new Date(rangeStart).getTime()));
+  const e = new Date(Math.min(
+    (end_date ? new Date(end_date) : new Date()).getTime(),
+    new Date(rangeEnd).getTime()
+  ));
+  if (e < s) return 0;
+  let count = 0;
+  const cur = new Date(s);
+  while (cur <= e) {
+    const dow = cur.getDay();
+    if (dow !== 0 && dow !== 6) count++;
+    cur.setDate(cur.getDate() + 1);
+  }
+  return count;
+}
 
 export default function ReportsPage() {
   const today = format(new Date(), 'yyyy-MM-dd');
@@ -91,6 +114,7 @@ export default function ReportsPage() {
       { data: holidays },
       { data: sickness },
       { data: tasks },
+      { data: taskAssignees },
       { data: jobs },
       { data: expenses },
     ] = await Promise.all([
@@ -98,7 +122,8 @@ export default function ReportsPage() {
       supabase.from('timesheet_entries').select('user_id, start_time, end_time').gte('work_date', start).lte('work_date', end),
       supabase.from('holidays').select('user_id, start_date, end_date, working_days').eq('status', 'approved').lte('start_date', end).gte('end_date', start),
       supabase.from('sickness_records').select('user_id, start_date, end_date').lte('start_date', end).or(`end_date.is.null,end_date.gte.${start}`),
-      supabase.from('tasks').select('id, created_by, status').gte('task_date', start).lte('task_date', end),
+      supabase.from('tasks').select('id, status, task_date').gte('task_date', start).lte('task_date', end),
+      supabase.from('task_assignees').select('task_id, user_id'),
       supabase.from('job_board').select('completed_by').eq('status', 'completed').gte('completed_at', `${start}T00:00:00`).lte('completed_at', `${end}T23:59:59`),
       supabase.from('expenses').select('user_id, amount').gte('created_at', `${start}T00:00:00`).lte('created_at', `${end}T23:59:59`),
     ]);
@@ -114,14 +139,11 @@ export default function ReportsPage() {
       )
     );
 
-    function sickDaysInRange(start_date: string, end_date: string | null): number {
-      const s = new Date(Math.max(new Date(start_date).getTime(), new Date(start).getTime()));
-      const e = new Date(Math.min(
-        (end_date ? new Date(end_date) : new Date()).getTime(),
-        new Date(end).getTime()
-      ));
-      if (e < s) return 0;
-      return differenceInCalendarDays(e, s) + 1;
+    // Build a map: task_id -> set of user_ids who are assignees
+    const assigneeMap = new Map<string, Set<string>>();
+    for (const a of (taskAssignees ?? [])) {
+      if (!assigneeMap.has(a.task_id)) assigneeMap.set(a.task_id, new Set());
+      assigneeMap.get(a.task_id)!.add(a.user_id);
     }
 
     const result: EmployeeMetrics[] = staff.map((member: any, i: number) => {
@@ -133,17 +155,25 @@ export default function ReportsPage() {
           const [sh, sm] = (t.start_time as string).split(':').map(Number);
           const [eh, em] = (t.end_time as string).split(':').map(Number);
           const gross = (eh * 60 + em) - (sh * 60 + sm);
-          const net = Math.max(0, gross - 60); // deduct 1-hour automatic lunch break
+          const net = Math.max(0, gross - 60);
           return sum + (net > 0 ? net / 60 : 0);
         }, 0);
+
       const holDays = (holidays ?? [])
         .filter((h: any) => h.user_id === uid)
         .reduce((sum: number, h: any) => sum + (h.working_days ?? 0), 0);
+
+      // Use working days (Mon–Fri) for sick day count
       const sickDays = (sickness ?? [])
         .filter((s: any) => s.user_id === uid)
-        .reduce((sum: number, s: any) => sum + sickDaysInRange(s.start_date, s.end_date), 0);
-      const myTasks = (tasks ?? []).filter((t: any) => t.created_by === uid);
+        .reduce((sum: number, s: any) => sum + workingDaysInRange(s.start_date, s.end_date, start, end), 0);
+
+      // Count tasks where user is an assignee (not just creator)
+      const myTasks = (tasks ?? []).filter((t: any) =>
+        assigneeMap.get(t.id)?.has(uid)
+      );
       const tasksCompleted = myTasks.filter((t: any) => t.status === 'completed').length;
+
       const jobsDone = (jobs ?? []).filter((j: any) => j.completed_by === uid).length;
       const myExpenses = (expenses ?? []).filter((e: any) => e.user_id === uid);
       const expTotal = myExpenses.reduce((sum: number, e: any) => sum + (e.amount ?? 0), 0);
@@ -170,7 +200,7 @@ export default function ReportsPage() {
 
     setMetrics(result);
     setLoading(false);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [preset, customStart, customEnd]);
 
   useEffect(() => { loadData(); }, [loadData]);
@@ -198,7 +228,7 @@ export default function ReportsPage() {
         'Role': m.role.replace(/_/g, ' '),
         'Hours Logged': m.hoursLogged,
         'Holiday Days Taken': m.holidayDays,
-        'Sick Days': m.sickDays,
+        'Sick Days (working)': m.sickDays,
         'Tasks Completed': m.tasksCompleted,
         'Total Tasks': m.tasksTotal,
         'Task Completion %': m.tasksTotal > 0 ? Math.round((m.tasksCompleted / m.tasksTotal) * 100) : 0,
@@ -211,7 +241,7 @@ export default function ReportsPage() {
       }));
       const ws = XLSX.utils.json_to_sheet(rows);
       ws['!cols'] = [
-        { wch: 24 }, { wch: 14 }, { wch: 14 }, { wch: 20 }, { wch: 12 },
+        { wch: 24 }, { wch: 14 }, { wch: 14 }, { wch: 20 }, { wch: 18 },
         { wch: 18 }, { wch: 12 }, { wch: 18 }, { wch: 16 }, { wch: 18 },
         { wch: 14 }, { wch: 18 }, { wch: 14 }, { wch: 18 },
       ];
@@ -235,10 +265,10 @@ export default function ReportsPage() {
   }), { hours: 0, holiday: 0, sick: 0, tasks: 0, jobs: 0, expenses: 0 });
 
   const maxHours = Math.max(...metrics.map(m => m.hoursLogged), 1);
-  const maxHol   = Math.max(...metrics.map(m => m.holidayDays), 1);
-  const maxSick  = Math.max(...metrics.map(m => m.sickDays), 1);
+  const maxHol = Math.max(...metrics.map(m => m.holidayDays), 1);
+  const maxSick = Math.max(...metrics.map(m => m.sickDays), 1);
   const maxTasks = Math.max(...metrics.map(m => m.tasksCompleted), 1);
-  const maxJobs  = Math.max(...metrics.map(m => m.jobsCompleted), 1);
+  const maxJobs = Math.max(...metrics.map(m => m.jobsCompleted), 1);
 
   return (
     <div className="p-4 space-y-5 max-w-4xl mx-auto">
@@ -309,12 +339,12 @@ export default function ReportsPage() {
           {/* Summary cards — managers only */}
           {isManager && (
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-              <SummaryCard icon={Clock}       label="Total Hours"  value={`${totals.hours.toFixed(1)}h`}         bg="bg-aas-blue"    />
-              <SummaryCard icon={Umbrella}    label="Holiday Days" value={`${totals.holiday}d`}                  bg="bg-green-500"   />
-              <SummaryCard icon={AlertCircle} label="Sick Days"    value={`${totals.sick}d`}                     bg="bg-red-500"     />
-              <SummaryCard icon={CheckSquare} label="Tasks Done"   value={`${totals.tasks}`}                     bg="bg-violet-500"  />
-              <SummaryCard icon={Briefcase}   label="Jobs Done"    value={`${totals.jobs}`}                      bg="bg-orange-500"  />
-              <SummaryCard icon={Receipt}     label="Expenses"     value={`£${totals.expenses.toFixed(2)}`}      bg="bg-yellow-500"  />
+              <SummaryCard icon={Clock} label="Total Hours" value={`${totals.hours.toFixed(1)}h`} bg="bg-aas-blue" />
+              <SummaryCard icon={Umbrella} label="Holiday Days" value={`${totals.holiday}d`} bg="bg-green-500" />
+              <SummaryCard icon={AlertCircle} label="Sick Days" value={`${totals.sick}d`} bg="bg-red-500" />
+              <SummaryCard icon={CheckSquare} label="Tasks Done" value={`${totals.tasks}`} bg="bg-violet-500" />
+              <SummaryCard icon={Briefcase} label="Jobs Done" value={`${totals.jobs}`} bg="bg-orange-500" />
+              <SummaryCard icon={Receipt} label="Expenses" value={`£${totals.expenses.toFixed(2)}`} bg="bg-yellow-500" />
             </div>
           )}
 
@@ -323,12 +353,12 @@ export default function ReportsPage() {
             <div className="flex items-center gap-2 text-xs text-gray-500 flex-wrap">
               <span className="shrink-0">Sort by:</span>
               {([
-                { key: 'name',           label: 'Name'    },
-                { key: 'hoursLogged',    label: 'Hours'   },
-                { key: 'holidayDays',    label: 'Holiday' },
-                { key: 'sickDays',       label: 'Sick'    },
-                { key: 'tasksCompleted', label: 'Tasks'   },
-                { key: 'jobsCompleted',  label: 'Jobs'    },
+                { key: 'name', label: 'Name' },
+                { key: 'hoursLogged', label: 'Hours' },
+                { key: 'holidayDays', label: 'Holiday' },
+                { key: 'sickDays', label: 'Sick' },
+                { key: 'tasksCompleted', label: 'Tasks' },
+                { key: 'jobsCompleted', label: 'Jobs' },
               ] as { key: keyof EmployeeMetrics; label: string }[]).map(opt => (
                 <button
                   key={String(opt.key)}
@@ -452,27 +482,27 @@ function EmployeeCard({ m, maxHours, maxHol, maxSick, maxTasks, maxJobs, isManag
 
       {/* Metric bars */}
       <div className="px-4 pb-3 space-y-2">
-        <MetricBar label="Hours logged"    value={m.hoursLogged}    display={`${m.hoursLogged}h`}                    max={maxHours}            color="bg-aas-blue"   />
-        <MetricBar label="Holiday taken"   value={m.holidayDays}    display={`${m.holidayDays}d`}                    max={maxHol}              color="bg-green-500"  />
-        <MetricBar label="Sick days"       value={m.sickDays}       display={`${m.sickDays}d`}                       max={Math.max(maxSick,1)} color="bg-red-400"    warn={m.sickDays > 0} />
-        <MetricBar label="Tasks completed" value={m.tasksCompleted} display={`${m.tasksCompleted}/${m.tasksTotal}`}  max={maxTasks}            color="bg-violet-500" />
-        <MetricBar label="Jobs completed"  value={m.jobsCompleted}  display={`${m.jobsCompleted}`}                   max={Math.max(maxJobs,1)} color="bg-orange-400" />
+        <MetricBar label="Hours logged" value={m.hoursLogged} display={`${m.hoursLogged}h`} max={maxHours} color="bg-aas-blue" />
+        <MetricBar label="Holiday taken" value={m.holidayDays} display={`${m.holidayDays}d`} max={maxHol} color="bg-green-500" />
+        <MetricBar label="Sick days (working)" value={m.sickDays} display={`${m.sickDays}d`} max={Math.max(maxSick,1)} color="bg-red-400" warn={m.sickDays > 0} />
+        <MetricBar label="Tasks completed" value={m.tasksCompleted} display={`${m.tasksCompleted}/${m.tasksTotal}`} max={maxTasks} color="bg-violet-500" />
+        <MetricBar label="Jobs completed" value={m.jobsCompleted} display={`${m.jobsCompleted}`} max={Math.max(maxJobs,1)} color="bg-orange-400" />
       </div>
 
       {/* Expanded detail */}
       {expanded && (
         <div className="border-t border-gray-100 px-4 py-4 bg-gray-50/60">
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mb-4">
-            <DetailStat label="Holiday allowance"  value={m.holidayAllowance != null ? `${m.holidayAllowance} days` : '—'} />
-            <DetailStat label="Holiday used"       value={m.holidayUsed != null ? `${m.holidayUsed} days` : '—'} />
+            <DetailStat label="Holiday allowance" value={m.holidayAllowance != null ? `${m.holidayAllowance} days` : '—'} />
+            <DetailStat label="Holiday used" value={m.holidayUsed != null ? `${m.holidayUsed} days` : '—'} />
             <DetailStat
               label="Holiday remaining"
               value={m.holidayBalance != null ? `${m.holidayBalance} days` : '—'}
               highlight={m.holidayBalance != null && m.holidayBalance <= 5}
             />
             <DetailStat label="Expenses submitted" value={`${m.expensesCount} claim${m.expensesCount !== 1 ? 's' : ''}`} />
-            <DetailStat label="Expenses value"     value={`£${m.expensesTotal.toFixed(2)}`} />
-            <DetailStat label="Task completion"    value={taskPct !== null ? `${taskPct}%` : '—'} />
+            <DetailStat label="Expenses value" value={`£${m.expensesTotal.toFixed(2)}`} />
+            <DetailStat label="Task completion" value={taskPct !== null ? `${taskPct}%` : '—'} />
           </div>
 
           {/* Holiday balance bar */}
@@ -500,4 +530,4 @@ function EmployeeCard({ m, maxHours, maxHol, maxSick, maxTasks, maxJobs, isManag
       )}
     </div>
   );
-}
+                    }
