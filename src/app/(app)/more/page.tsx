@@ -2,7 +2,7 @@ import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import {
-  Users, Building2, MapPin, Truck, Clock, Receipt,
+  Users, Building2, MapPin, Clock, Receipt,
   Navigation, BarChart3, Settings, Bell, LogOut, Stethoscope, UserCircle, Wrench, Umbrella
 } from 'lucide-react';
 import { logout } from '@/lib/auth-actions';
