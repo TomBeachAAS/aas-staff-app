@@ -53,7 +53,12 @@ export default async function JobsPage({
   } else if (filter === 'completed') {
     query = query.eq('status', 'completed');
   } else if (filter === 'pending') {
-    query = query.eq('status', 'pending_approval');
+    // Managers see all pending; employees see only their own submissions
+    if (isManagerOrAdmin) {
+      query = query.eq('status', 'pending_approval');
+    } else {
+      query = query.eq('status', 'pending_approval').eq('created_by', user.id);
+    }
   }
 
   const { data: jobs } = await query.limit(50);
@@ -69,18 +74,31 @@ export default async function JobsPage({
   const profileMap = Object.fromEntries((profileRows ?? []).map((p: any) => [p.id, p.full_name]));
 
   let pendingCount = 0;
+  let mySubmissionsCount = 0;
   if (isManagerOrAdmin) {
     const { count } = await supabase
       .from('job_board')
       .select('*', { count: 'exact', head: true })
       .eq('status', 'pending_approval');
     pendingCount = count ?? 0;
+  } else {
+    const { count } = await supabase
+      .from('job_board')
+      .select('*', { count: 'exact', head: true })
+      .eq('status', 'pending_approval')
+      .eq('created_by', user.id);
+    mySubmissionsCount = count ?? 0;
   }
 
   const tabs = [
     { key: 'active', label: 'Open / In progress' },
     { key: 'completed', label: 'Completed' },
-    ...(isManagerOrAdmin ? [{ key: 'pending', label: `Pending approval${pendingCount > 0 ? ` (${pendingCount})` : ''}` }] : []),
+    ...(isManagerOrAdmin
+      ? [{ key: 'pending', label: `Pending approval${pendingCount > 0 ? ` (${pendingCount})` : ''}` }]
+      : mySubmissionsCount > 0 || filter === 'pending'
+        ? [{ key: 'pending', label: `My submissions${mySubmissionsCount > 0 ? ` (${mySubmissionsCount})` : ''}` }]
+        : [{ key: 'pending', label: 'My submissions' }]
+    ),
   ];
 
   return (
@@ -115,7 +133,7 @@ export default async function JobsPage({
           {(jobs ?? []).length === 0 ? (
             <div className="text-center py-12 text-sm text-gray-400">
               <ClipboardList size={32} className="mx-auto mb-2 opacity-30" />
-              No jobs here
+              {filter === 'pending' ? 'No pending submissions' : 'No jobs here'}
             </div>
           ) : (
             (jobs ?? []).map((job: any) => {
@@ -151,6 +169,9 @@ export default async function JobsPage({
                     )}
                     {!job.claimed_by && job.status === 'open' && (
                       <span className="text-aas-blue font-medium">Available to claim</span>
+                    )}
+                    {job.status === 'pending_approval' && (
+                      <span className="text-amber-600 font-medium">Awaiting approval</span>
                     )}
                   </div>
                 </Link>
