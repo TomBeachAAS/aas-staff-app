@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Trash2 } from 'lucide-react';
 import Link from 'next/link';
 
 const inp = 'w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-aas-blue';
@@ -17,6 +17,8 @@ export default function EditEquipmentPage({ params }: { params: Promise<{ id: st
   const [error, setError] = useState('');
   const [pending, setPending] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     params.then(async p => {
@@ -58,6 +60,16 @@ export default function EditEquipmentPage({ params }: { params: Promise<{ id: st
       if (!res.ok) { setError(json.error || 'Something went wrong.'); setPending(false); }
       else { router.push('/equipment/' + id); }
     } catch { setError('Network error.'); setPending(false); }
+  }
+
+  async function handleDelete() {
+    setDeleting(true);
+    try {
+      const res = await fetch('/api/equipment/' + id, { method: 'DELETE' });
+      const json = await res.json();
+      if (!res.ok) { setError(json.error || 'Delete failed.'); setDeleting(false); setShowDeleteConfirm(false); }
+      else { router.push('/equipment'); }
+    } catch { setError('Network error.'); setDeleting(false); setShowDeleteConfirm(false); }
   }
 
   if (loading) return <div className="p-4 text-sm text-gray-400">Loading…</div>;
@@ -134,6 +146,39 @@ export default function EditEquipmentPage({ params }: { params: Promise<{ id: st
           {pending ? 'Saving…' : 'Save changes'}
         </button>
       </form>
+
+      <button
+        type="button"
+        onClick={() => setShowDeleteConfirm(true)}
+        className="w-full py-3 border border-red-200 text-red-500 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 hover:bg-red-50 transition-colors"
+      >
+        <Trash2 size={15} />
+        Delete equipment
+      </button>
+
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 bg-black/50 flex items-end justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl p-5 w-full max-w-sm space-y-4">
+            <h3 className="text-base font-bold text-gray-800">Delete equipment?</h3>
+            <p className="text-sm text-gray-500">This cannot be undone. Any tasks linked to this equipment will lose the link.</p>
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                onClick={() => setShowDeleteConfirm(false)}
+                className="py-2.5 border border-gray-200 rounded-xl text-sm font-medium text-gray-600"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDelete}
+                disabled={deleting}
+                className="py-2.5 bg-red-500 text-white rounded-xl text-sm font-semibold disabled:opacity-60"
+              >
+                {deleting ? 'Deleting…' : 'Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
