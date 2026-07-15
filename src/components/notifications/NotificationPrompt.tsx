@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Bell, BellOff } from 'lucide-react';
+import { Bell, BellOff, AlertCircle } from 'lucide-react';
 
 function urlBase64ToUint8Array(base64String: string): Uint8Array {
   const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
@@ -17,6 +17,7 @@ export function NotificationPrompt() {
   const [subscribed, setSubscribed] = useState(false);
   const [loading, setLoading] = useState(false);
   const [supported, setSupported] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (typeof window !== 'undefined' && 'Notification' in window && 'serviceWorker' in navigator && 'PushManager' in window) {
@@ -30,7 +31,15 @@ export function NotificationPrompt() {
 
   async function subscribe() {
     setLoading(true);
+    setError(null);
     try {
+      const vapidKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
+      if (!vapidKey) {
+        setError('Push notifications are not configured yet. Contact your administrator.');
+        setLoading(false);
+        return;
+      }
+
       const perm = await Notification.requestPermission();
       setPermission(perm);
       if (perm !== 'granted') { setLoading(false); return; }
@@ -38,24 +47,31 @@ export function NotificationPrompt() {
       const reg = await navigator.serviceWorker.ready;
       const sub = await reg.pushManager.subscribe({
         userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!),
+        applicationServerKey: urlBase64ToUint8Array(vapidKey),
       });
 
-      await fetch('/api/push/subscribe', {
+      const res = await fetch('/api/push/subscribe', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(sub.toJSON()),
       });
 
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({}));
+        throw new Error(json.error || 'Failed to save subscription');
+      }
+
       setSubscribed(true);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Push subscription failed:', err);
+      setError(err?.message ?? 'Could not enable notifications. Try again.');
     }
     setLoading(false);
   }
 
   async function unsubscribe() {
     setLoading(true);
+    setError(null);
     try {
       const reg = await navigator.serviceWorker.ready;
       const sub = await reg.pushManager.getSubscription();
@@ -68,8 +84,9 @@ export function NotificationPrompt() {
         await sub.unsubscribe();
         setSubscribed(false);
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Unsubscribe failed:', err);
+      setError(err?.message ?? 'Could not disable notifications.');
     }
     setLoading(false);
   }
@@ -82,6 +99,13 @@ export function NotificationPrompt() {
         <Bell size={18} className="text-aas-blue" />
         <h3 className="text-sm font-semibold text-gray-800">Push notifications</h3>
       </div>
+
+      {error && (
+        <div className="flex items-start gap-2 p-3 rounded-lg bg-red-50 border border-red-100">
+          <AlertCircle size={14} className="text-red-500 mt-0.5 shrink-0" />
+          <p className="text-xs text-red-700">{error}</p>
+        </div>
+      )}
 
       {permission === 'denied' ? (
         <p className="text-sm text-gray-500">
