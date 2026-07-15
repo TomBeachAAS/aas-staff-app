@@ -7,9 +7,23 @@ import { createClient } from '@/lib/supabase/client';
 import { EXPENSE_CATEGORY_LABELS } from '@/lib/utils';
 import { Camera, X, Image } from 'lucide-react';
 
+const CURRENCIES = [
+  { code: 'GBP', symbol: '£', label: 'GBP — British Pound' },
+  { code: 'EUR', symbol: '€', label: 'EUR — Euro' },
+  { code: 'USD', symbol: '$', label: 'USD — US Dollar' },
+  { code: 'CAD', symbol: 'CA$', label: 'CAD — Canadian Dollar' },
+  { code: 'AUD', symbol: 'A$', label: 'AUD — Australian Dollar' },
+  { code: 'CHF', symbol: 'Fr', label: 'CHF — Swiss Franc' },
+  { code: 'SEK', symbol: 'kr', label: 'SEK — Swedish Krona' },
+  { code: 'NOK', symbol: 'kr', label: 'NOK — Norwegian Krone' },
+  { code: 'DKK', symbol: 'kr', label: 'DKK — Danish Krone' },
+  { code: 'JPY', symbol: '¥', label: 'JPY — Japanese Yen' },
+];
+
 export default function NewExpensePage() {
   const router = useRouter();
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
+  const galleryInputRef = useRef<HTMLInputElement>(null);
   const submitIntentRef = useRef<'draft' | 'submitted'>('submitted');
 
   const [form, setForm] = useState({
@@ -17,6 +31,7 @@ export default function NewExpensePage() {
     category: 'other',
     description: '',
     amount: '',
+    currency: 'GBP',
     notes: '',
   });
   const [receipt, setReceipt] = useState<File | null>(null);
@@ -38,8 +53,11 @@ export default function NewExpensePage() {
   function removeReceipt() {
     setReceipt(null);
     setReceiptPreview(null);
-    if (fileInputRef.current) fileInputRef.current.value = '';
+    if (cameraInputRef.current) cameraInputRef.current.value = '';
+    if (galleryInputRef.current) galleryInputRef.current.value = '';
   }
+
+  const currencySymbol = CURRENCIES.find(c => c.code === form.currency)?.symbol ?? '£';
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -78,7 +96,7 @@ export default function NewExpensePage() {
       category: form.category as never,
       description: form.description,
       amount: parseFloat(form.amount),
-      currency: 'GBP',
+      currency: form.currency,
       notes: form.notes || null,
       receipt_url,
       status: intent,
@@ -113,11 +131,21 @@ export default function NewExpensePage() {
           <input value={form.description} onChange={e => set('description', e.target.value)} required placeholder="e.g. Fuel for site visit to Lincoln" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-aas-blue" />
         </div>
 
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Amount (£)</label>
-          <div className="relative">
-            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">£</span>
-            <input type="number" step="0.01" min="0" value={form.amount} onChange={e => set('amount', e.target.value)} required placeholder="0.00" className="w-full pl-7 pr-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-aas-blue" />
+        <div className="grid grid-cols-3 gap-3">
+          <div className="col-span-1">
+            <label className="block text-sm font-medium text-gray-700 mb-1">Currency</label>
+            <select value={form.currency} onChange={e => set('currency', e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-aas-blue">
+              {CURRENCIES.map(c => (
+                <option key={c.code} value={c.code}>{c.code}</option>
+              ))}
+            </select>
+          </div>
+          <div className="col-span-2">
+            <label className="block text-sm font-medium text-gray-700 mb-1">Amount</label>
+            <div className="relative">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">{currencySymbol}</span>
+              <input type="number" step="0.01" min="0" value={form.amount} onChange={e => set('amount', e.target.value)} required placeholder="0.00" className="w-full pl-7 pr-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-aas-blue" />
+            </div>
           </div>
         </div>
 
@@ -140,12 +168,12 @@ export default function NewExpensePage() {
               <label className="flex-1 flex flex-col items-center gap-1.5 py-4 border-2 border-dashed border-gray-200 rounded-lg cursor-pointer hover:border-aas-blue transition-colors">
                 <Camera size={22} className="text-gray-400" />
                 <span className="text-xs text-gray-500">Take photo</span>
-                <input ref={fileInputRef} type="file" accept="image/*" capture="environment" onChange={handleReceiptChange} className="sr-only" />
+                <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" onChange={handleReceiptChange} className="sr-only" />
               </label>
               <label className="flex-1 flex flex-col items-center gap-1.5 py-4 border-2 border-dashed border-gray-200 rounded-lg cursor-pointer hover:border-aas-blue transition-colors">
                 <Image size={22} className="text-gray-400" />
                 <span className="text-xs text-gray-500">Choose file</span>
-                <input type="file" accept="image/*" onChange={handleReceiptChange} className="sr-only" />
+                <input ref={galleryInputRef} type="file" accept="image/*" onChange={handleReceiptChange} className="sr-only" />
               </label>
             </div>
           )}
