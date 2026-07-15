@@ -2,7 +2,7 @@ import { createClient } from '@/lib/supabase/server';
 import { redirect, notFound } from 'next/navigation';
 import { format } from 'date-fns';
 import Link from 'next/link';
-import { Pencil } from 'lucide-react';
+import { Pencil, Wrench, Truck } from 'lucide-react';
 import { TaskStatusBadge } from '@/components/ui/Badge';
 import { Card, CardContent } from '@/components/ui/Card';
 import { TaskCompleteForm } from '@/components/tasks/TaskCompleteForm';
@@ -18,13 +18,12 @@ export default async function TaskDetailPage({ params }: { params: Promise<{ id:
 
   const { data: task } = await supabase
     .from('tasks')
-    .select('*, customer:customers(company_name), location:locations(name, address_line1, postcode, latitude, longitude), created_by_profile:profiles!tasks_created_by_fkey(full_name)')
+    .select('*, customer:customers(company_name), location:locations(name, address_line1, postcode, latitude, longitude), created_by_profile:profiles!tasks_created_by_fkey(full_name), equipment:equipment(id, name, type, make, model, registration)')
     .eq('id', id)
     .single();
 
   if (!task) notFound();
 
-  // Fetch assignees separately to avoid FK ambiguity
   const { data: assigneeRows } = await supabase
     .from('task_assignees')
     .select('user_id')
@@ -41,9 +40,10 @@ export default async function TaskDetailPage({ params }: { params: Promise<{ id:
   const canComplete = isAssigned || task.created_by === user.id || isManagerOrAdmin;
   const canEdit = task.created_by === user.id || isManagerOrAdmin;
 
-  const customer = task.customer as {company_name: string} | undefined;
-  const location = task.location as {name: string; address_line1?: string; postcode?: string; latitude?: number; longitude?: number} | undefined;
-  const creator = task.created_by_profile as {full_name: string} | undefined;
+  const customer = task.customer as { company_name: string } | null;
+  const location = task.location as { name: string; address_line1?: string; postcode?: string; latitude?: number; longitude?: number } | null;
+  const creator = task.created_by_profile as { full_name: string } | null;
+  const eq = task.equipment as { id: string; name: string; type: string; make?: string; model?: string; registration?: string } | null;
 
   return (
     <div className="p-4 space-y-4 max-w-2xl mx-auto">
@@ -53,7 +53,7 @@ export default async function TaskDetailPage({ params }: { params: Promise<{ id:
           <TaskStatusBadge status={task.status} />
           {canEdit && (
             <Link
-              href={`/tasks/${id}/edit`}
+              href={'/tasks/' + id + '/edit'}
               className="flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50"
             >
               <Pencil size={14} />
@@ -66,7 +66,7 @@ export default async function TaskDetailPage({ params }: { params: Promise<{ id:
       {task.task_date && (
         <p className="text-sm text-gray-500">
           {format(new Date(task.task_date), 'EEEE, d MMMM yyyy')}
-          {task.start_time ? ` — ${task.start_time.slice(0, 5)}${task.end_time ? ` to ${task.end_time.slice(0, 5)}` : ''}` : ''}
+          {task.start_time ? ' — ' + task.start_time.slice(0, 5) + (task.end_time ? ' to ' + task.end_time.slice(0, 5) : '') : ''}
         </p>
       )}
 
@@ -92,7 +92,7 @@ export default async function TaskDetailPage({ params }: { params: Promise<{ id:
             {location.postcode && <p className="text-xs text-gray-400">{location.postcode}</p>}
             {location.latitude && location.longitude && (
               <a
-                href={`https://maps.google.com/?q=${location.latitude},${location.longitude}`}
+                href={'https://maps.google.com/?q=' + location.latitude + ',' + location.longitude}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-xs text-aas-blue hover:underline"
@@ -100,6 +100,26 @@ export default async function TaskDetailPage({ params }: { params: Promise<{ id:
                 Open in Maps
               </a>
             )}
+          </div>
+        )}
+        {eq && (
+          <div className="bg-white rounded-xl border border-gray-100 p-3 col-span-2">
+            <p className="text-xs text-gray-400 mb-1">Vehicle / Equipment</p>
+            <Link href={'/equipment/' + eq.id} className="flex items-center gap-2 hover:opacity-80 transition-opacity">
+              <div className={'w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ' + (eq.type === 'vehicle' ? 'bg-green-50' : 'bg-blue-50')}>
+                {eq.type === 'vehicle'
+                  ? <Truck size={13} className="text-green-600" />
+                  : <Wrench size={13} className="text-aas-blue" />}
+              </div>
+              <div>
+                <p className="text-sm font-medium text-gray-800">{eq.name}</p>
+                {(eq.make || eq.model || eq.registration) && (
+                  <p className="text-xs text-gray-400">
+                    {[eq.make, eq.model, eq.registration ? '(' + eq.registration + ')' : ''].filter(Boolean).join(' ')}
+                  </p>
+                )}
+              </div>
+            </Link>
           </div>
         )}
       </div>
@@ -132,7 +152,9 @@ export default async function TaskDetailPage({ params }: { params: Promise<{ id:
 
       {task.status === 'completed' && task.completed_at && (
         <div className="bg-green-50 rounded-xl border border-green-100 p-3">
-          <p className="text-xs text-green-600 font-medium">Completed {format(new Date(task.completed_at), 'd MMM yyyy HH:mm')}</p>
+          <p className="text-xs text-green-600 font-medium">
+            Completed {format(new Date(task.completed_at), 'd MMM yyyy HH:mm')}
+          </p>
           {task.completion_notes && <p className="text-sm text-green-700 mt-1">{task.completion_notes}</p>}
         </div>
       )}
