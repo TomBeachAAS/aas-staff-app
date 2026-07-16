@@ -145,16 +145,16 @@ t.created_by === user.id || assignedIds.includes(t.id)
 
       {isManagerOrAdmin && (
         <div className="grid grid-cols-2 gap-3">
-          <StatCard label="Pending Approvals"  value={pendingApprovals ?? 0}  icon={Umbrella}    iconColor="text-amber-600"  iconBg="bg-amber-50"  />
-          <StatCard label="Staff Off Today"    value={staffOffToday ?? 0}     icon={CalendarX}   iconColor="text-blue-600"   iconBg="bg-blue-50"   />
-          <StatCard label="Overdue Tasks"      value={overdueTaskCount ?? 0}  icon={AlertCircle} iconColor="text-red-600"    iconBg="bg-red-50"    />
-          <StatCard label="Expenses to Review" value={pendingExpenses ?? 0}   icon={TrendingUp}  iconColor="text-purple-600" iconBg="bg-purple-50" />
+          <StatCard label="Pending Approvals"  value={pendingApprovals ?? 0}  icon={Umbrella}    iconColor="text-amber-600"  iconBg="bg-amber-50"  href="/holidays?filter=pending" />
+          <StatCard label="Staff Off Today"    value={staffOffToday ?? 0}     icon={CalendarX}   iconColor="text-blue-600"   iconBg="bg-blue-50"   href="/holidays" />
+          <StatCard label="Overdue Tasks"      value={overdueTaskCount ?? 0}  icon={AlertCircle} iconColor="text-red-600"    iconBg="bg-red-50"    href="/tasks" />
+          <StatCard label="Expenses to Review" value={pendingExpenses ?? 0}   icon={TrendingUp}  iconColor="text-purple-600" iconBg="bg-purple-50" href="/expenses" />
         </div>
       )}
 
       <div className="grid grid-cols-2 gap-3">
-        <StatCard label="Jobs Open"           value={openJobsCount ?? 0}         icon={Briefcase}   iconColor="text-orange-600" iconBg="bg-orange-50" />
-        <StatCard label="Completed This Week" value={completedJobsThisWeek ?? 0} icon={CheckSquare} iconColor="text-green-600"  iconBg="bg-green-50"  />
+        <StatCard label="Jobs Open"           value={openJobsCount ?? 0}         icon={Briefcase}   iconColor="text-orange-600" iconBg="bg-orange-50" href="/jobs" />
+        <StatCard label="Completed This Week" value={completedJobsThisWeek ?? 0} icon={CheckSquare} iconColor="text-green-600"  iconBg="bg-green-50"  href="/jobs" />
       </div>
 
       <Card>
@@ -220,7 +220,7 @@ t.created_by === user.id || assignedIds.includes(t.id)
 
         {todayTasks.length === 0 && overdueTasks.length === 0 && (completedTasks ?? []).length === 0 && (
           <CardContent>
-            <p className="text-sm text-gray-400 text-center py-4">No tasks due â nice work!</p>
+            <p className="text-sm text-gray-400 text-center py-4">No tasks due Ã¢ÂÂ nice work!</p>
           </CardContent>
         )}
 
