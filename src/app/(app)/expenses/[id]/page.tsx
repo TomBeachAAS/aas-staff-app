@@ -2,7 +2,7 @@ import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { format } from 'date-fns';
-import { ArrowLeft, Receipt } from 'lucide-react';
+import { ArrowLeft, Receipt, Pencil } from 'lucide-react';
 import { EXPENSE_CATEGORY_LABELS } from '@/lib/utils';
 import { ExpenseActions } from '@/components/expenses/ExpenseActions';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
@@ -36,6 +36,7 @@ export default async function ExpenseDetailPage({
   if (!isOwner && !isManagerOrAdmin) redirect('/expenses');
 
   const ownerName = (expense.owner as { full_name: string } | null)?.full_name ?? '';
+  const canEdit = isOwner && expense.status === 'draft';
 
   return (
     <div className="p-4 space-y-4 max-w-md mx-auto">
@@ -43,7 +44,16 @@ export default async function ExpenseDetailPage({
         <Link href="/expenses" className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
           <ArrowLeft size={18} className="text-gray-600" />
         </Link>
-        <h2 className="text-lg font-bold text-gray-800">Expense claim</h2>
+        <h2 className="text-lg font-bold text-gray-800 flex-1">Expense claim</h2>
+        {canEdit && (
+          <Link
+            href={'/expenses/' + id + '/edit'}
+            className="flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50 transition-colors"
+          >
+            <Pencil size={14} />
+            Edit
+          </Link>
+        )}
       </div>
 
       <Card>
@@ -61,7 +71,10 @@ export default async function ExpenseDetailPage({
           <div className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
             <div>
               <p className="text-xs text-gray-400 mb-0.5">Amount</p>
-              <p className="font-bold text-gray-800 text-lg">{'£' + Number(expense.amount).toFixed(2)}</p>
+              <p className="font-bold text-gray-800 text-lg">
+                {expense.currency && expense.currency !== 'GBP' ? expense.currency + ' ' : '£'}
+                {Number(expense.amount).toFixed(2)}
+              </p>
             </div>
             <div>
               <p className="text-xs text-gray-400 mb-0.5">Date</p>
