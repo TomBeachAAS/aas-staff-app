@@ -4,9 +4,17 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 
-export function ApproveHolidayForm({ holidayId, approvedBy }: { holidayId: string; approvedBy: string }) {
+export function ApproveHolidayForm({
+  holidayId,
+  approvedBy,
+  defaultAction = 'approve',
+}: {
+  holidayId: string;
+  approvedBy: string;
+  defaultAction?: 'approve' | 'reject';
+}) {
   const router = useRouter();
-  const [action, setAction] = useState<'approve' | 'reject'>('approve');
+  const [action, setAction] = useState<'approve' | 'reject'>(defaultAction);
   const [reason, setReason] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -25,8 +33,7 @@ export function ApproveHolidayForm({ holidayId, approvedBy }: { holidayId: strin
       })
       .eq('id', holidayId);
     if (err) { setError(err.message); setLoading(false); return; }
-    // Notify the requester
-fetch('/api/notify', {
+    fetch('/api/notify', {
   method: 'POST',
   headers: { 'Content-Type': 'application/json' },
   body: JSON.stringify({
