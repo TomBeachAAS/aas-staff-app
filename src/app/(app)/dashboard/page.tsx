@@ -5,7 +5,7 @@ import { format, subDays, startOfWeek } from 'date-fns';
 import { Umbrella, CheckSquare, AlertCircle, CalendarX, TrendingUp, Briefcase, ExternalLink } from 'lucide-react';
 import { StatCard } from '@/components/ui/StatCard';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
-import { MotivationalBanner } from '@/componentsh/dashboard/MotivationalBanner';
+import { MotivationalBanner } from '@/components/dashboard/MotivationalBanner';
 import { WeatherWidget } from '@/components/dashboard/WeatherWidget';
 
 export const dynamic = 'force-dynamic'; // v2
