@@ -123,7 +123,16 @@ export default async function StaffDetailPage({ params }: { params: Promise<{ id
         />
       )}
 
-      <Link href="/staff" className="text-sm text-aas-blue hover:underline">Back to staff</Link>
+      {isAdmin && (
+<Link
+href={'/staff/' + id + '/edit'}
+className="w-full flex items-center justify-center py-2.5 border border-aas-blue text-aas-blue rounded-xl text-sm font-medium hover:bg-blue-50 transition-colors"
+>
+Edit profile
+</Link>
+)}
+
+<Link href="/staff" className="text-sm text-aas-blue hover:underline">Back to staff</Link>
     </div>
   );
 }
