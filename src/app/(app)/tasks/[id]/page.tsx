@@ -6,6 +6,7 @@ import { Pencil, Wrench, Truck } from 'lucide-react';
 import { TaskStatusBadge } from '@/components/ui/Badge';
 import { Card, CardContent } from '@/components/ui/Card';
 import { TaskCompleteForm } from '@/components/tasks/TaskCompleteForm';
+import { TaskStartButton } from '@/components/tasks/TaskStartButton';
 import { TaskDeleteButton } from '@/components/tasks/TaskDeleteButton';
 
 export const dynamic = 'force-dynamic';
@@ -157,6 +158,10 @@ export default async function TaskDetailPage({ params }: { params: Promise<{ id:
           </p>
           {task.completion_notes && <p className="text-sm text-green-700 mt-1">{task.completion_notes}</p>}
         </div>
+      )}
+
+      {canComplete && task.status === 'not_started' && (
+        <TaskStartButton taskId={task.id} />
       )}
 
       {canComplete && !['completed', 'cancelled'].includes(task.status) && (
