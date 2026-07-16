@@ -73,11 +73,15 @@ function randomVideo() {
 }
 
 export function MotivationalBanner() {
-  const [index, setIndex] = useState(() => Math.floor(Math.random() * MESSAGES.length));
+  const [index, setIndex] = useState(0);
   const [visible, setVisible] = useState(true);
-  const [video] = useState(randomVideo);
+  const [video, setVideo] = useState(VIDEOS[0]);
 
   useEffect(() => {
+    // Randomize after mount to avoid server/client hydration mismatch
+    setIndex(Math.floor(Math.random() * MESSAGES.length));
+    setVideo(VIDEOS[Math.floor(Math.random() * VIDEOS.length)]);
+
     const interval = setInterval(() => {
       setVisible(false);
       setTimeout(() => {
