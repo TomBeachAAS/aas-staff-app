@@ -57,14 +57,17 @@ export default async function DashboardPage() {
     t.created_by === user.id || assignedIds.includes(t.id)
   );
 
-  const { data: completedTasks } = await supabase
-    .from('tasks')
-    .select('id, title, updated_at')
-    .or(`created_by.eq.${user.id}${assignedIds.length>0?',id.in.('+assignedIds.join(',')+')':""`)
-    .eq('status', 'completed')
-    .gte('updated_at', sevenDaysAgoStart)
-    .order('updated_at', { ascending: false })
-    .limit(5);
+  const { data: completedTasksAll } = await supabase
+.from('tasks')
+.select('id, title, updated_at, created_by')
+.eq('status', 'completed')
+.gte('updated_at', sevenDaysAgoStart)
+.order('updated_at', { ascending: false })
+.limit(20);
+
+const completedTasks = (completedTasksAll ?? []).filter((t: any) =>
+t.created_by === user.id || assignedIds.includes(t.id)
+).slice(0, 5);
 
   const [
     { count: openJobsCount },
