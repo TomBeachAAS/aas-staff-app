@@ -1,0 +1,268 @@
+'use client';
+
+import { useEffect, useState } from 'react';
+import { useRouter, useParams } from 'next/navigation';
+import { createClient } from '@/lib/supabase/client';
+import Link from 'next/link';
+
+const PRIORITIES = ['urgent', 'high', 'normal', 'low'];
+const STATUSES = ['not_started', 'in_progress', 'completed', 'cancelled'];
+
+export default function EditTaskPage() {
+  const router = useRouter();
+  const params = useParams<{ id: string }>();
+  const id = params.id;
+
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const [title, setTitle] = useState('');
+  const [description, setDescription] = useState('');
+  const [taskDate, setTaskDate] = useState('');
+  const [allDay, setAllDay] = useState(true);
+  const [startTime, setStartTime] = useState('09:00');
+  const [endTime, setEndTime] = useState('17:00');
+  const [priority, setPriority] = useState('normal');
+  const [status, setStatus] = useState('not_started');
+  const [notes, setNotes] = useState('');
+  const [customerId, setCustomerId] = useState('');
+  const [locationId, setLocationId] = useState('');
+  const [equipmentId, setEquipmentId] = useState('');
+  const [selectedAssignees, setSelectedAssignees] = useState<string[]>([]);
+
+  const [customers, setCustomers] = useState<{ id: string; company_name: string }[]>([]);
+  const [locations, setLocations] = useState<{ id: string; name: string; customer_id: string | null }[]>([]);
+  const [equipment, setEquipment] = useState<{ id: string; name: string; registration: string | null }[]>([]);
+  const [staff, setStaff] = useState<{ id: string; full_name: string }[]>([]);
+
+  // Filter locations by selected customer
+  const filteredLocations = customerId
+    ? locations.filter(l => !l.customer_id || l.customer_id === customerId)
+    : locations;
+
+  useEffect(() => {
+    const supabase = createClient();
+    Promise.all([
+      supabase.from('tasks').select('*').eq('id', id).single(),
+      supabase.from('task_assignees').select('user_id').eq('task_id', id),
+      supabase.from('customers').select('id, company_name').eq('is_active', true).order('company_name'),
+      supabase.from('locations').select('id, name, customer_id').eq('is_active', true).order('name'),
+      supabase.from('equipment').select('id, name, registration').eq('is_active', true).order('name'),
+      supabase.from('profiles').select('id, full_name').eq('status', 'active').order('full_name'),
+    ]).then(([{ data: task }, { data: assignees }, { data: c }, { data: l }, { data: eq }, { data: s }]) => {
+      if (task) {
+        setTitle(task.title ?? '');
+        setDescription(task.description ?? '');
+        setTaskDate(task.task_date ?? '');
+        setAllDay(task.all_day ?? true);
+        setStartTime(task.start_time?.slice(0, 5) ?? '09:00');
+        setEndTime(task.end_time?.slice(0, 5) ?? '17:00');
+        setPriority(task.priority ?? 'normal');
+        setStatus(task.status ?? 'not_started');
+        setNotes(task.notes ?? '');
+        setCustomerId(task.customer_id ?? '');
+        setLocationId(task.location_id ?? '');
+        setEquipmentId(task.equipment_id ?? '');
+      }
+      setSelectedAssignees((assignees ?? []).map((a: any) => a.user_id));
+      setCustomers(c ?? []);
+      setLocations(l ?? []);
+      setEquipment(eq ?? []);
+      setStaff(s ?? []);
+      setLoading(false);
+    });
+  }, [id]);
+
+  function toggleAssignee(userId: string) {
+    setSelectedAssignees(prev =>
+      prev.includes(userId) ? prev.filter(a => a !== userId) : [...prev, userId]
+    );
+  }
+
+  function handleCustomerChange(newCustomerId: string) {
+    setCustomerId(newCustomerId);
+    // Clear location if it belongs to a different customer
+    if (locationId) {
+      const loc = locations.find(l => l.id === locationId);
+      if (loc?.customer_id && loc.customer_id !== newCustomerId) {
+        setLocationId('');
+      }
+    }
+  }
+
+  async function handleSave() {
+    if (!title.trim()) { setError('Title is required'); return; }
+    setSaving(true);
+    setError('');
+    const supabase = createClient();
+
+    const { error: taskErr } = await supabase.from('tasks').update({
+      title: title.trim(),
+      description: description || null,
+      task_date: taskDate || null,
+      all_day: allDay,
+      start_time: !allDay ? startTime + ':00' : null,
+      end_time: !allDay ? endTime + ':00' : null,
+      priority,
+      status,
+      notes: notes || null,
+      customer_id: customerId || null,
+      location_id: locationId || null,
+      equipment_id: equipmentId || null,
+    }).eq('id', id);
+
+    if (taskErr) { setError(taskErr.message); setSaving(false); return; }
+
+    // Update assignees: delete all then re-insert
+    await supabase.from('task_assignees').delete().eq('task_id', id);
+    if (selectedAssignees.length > 0) {
+      await supabase.from('task_assignees').insert(
+        selectedAssignees.map(userId => ({ task_id: id, user_id: userId }))
+      );
+    }
+
+    setSaving(false);
+    router.push(`/tasks/${id}`);
+  }
+
+  const inputClass = 'w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-aas-blue';
+
+  if (loading) return (
+    <div className="flex-1 flex items-center justify-center p-8">
+      <div className="w-6 h-6 border-2 border-aas-blue border-t-transparent rounded-full animate-spin" />
+    </div>
+  );
+
+  return (
+    <div className="p-4 space-y-4 max-w-2xl mx-auto">
+      <div className="flex items-center justify-between">
+        <h2 className="text-lg font-bold text-gray-800">Edit task</h2>
+        <Link href={`/tasks/${id}`} className="text-sm text-gray-500 hover:text-gray-700">Cancel</Link>
+      </div>
+
+      {error && (
+        <div className="p-3 rounded-lg bg-red-50 text-sm text-red-700">{error}</div>
+      )}
+
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">Title</label>
+        <input value={title} onChange={e => setTitle(e.target.value)} className={inputClass} />
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+        <textarea value={description} onChange={e => setDescription(e.target.value)} rows={3} className={`${inputClass} resize-none`} />
+      </div>
+
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Priority</label>
+          <select value={priority} onChange={e => setPriority(e.target.value)} className={inputClass}>
+            {PRIORITIES.map(p => <option key={p} value={p}>{p}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+          <select value={status} onChange={e => setStatus(e.target.value)} className={inputClass}>
+            {STATUSES.map(s => <option key={s} value={s}>{s.replace('_', ' ')}</option>)}
+          </select>
+        </div>
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
+        <input type="date" value={taskDate} onChange={e => setTaskDate(e.target.value)} className={inputClass} />
+      </div>
+
+      <label className="flex items-center gap-2 cursor-pointer select-none">
+        <input type="checkbox" checked={allDay} onChange={e => setAllDay(e.target.checked)} className="rounded" />
+        <span className="text-sm text-gray-700">All day</span>
+      </label>
+
+      {!allDay && (
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Start time</label>
+            <input type="time" value={startTime} onChange={e => setStartTime(e.target.value)} className={inputClass} />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">End time</label>
+            <input type="time" value={endTime} onChange={e => setEndTime(e.target.value)} className={inputClass} />
+          </div>
+        </div>
+      )}
+
+      {/* Assignees */}
+      {staff.length > 0 && (
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Assigned to</label>
+          <div className="flex flex-wrap gap-2">
+            {staff.map(s => (
+              <button
+                key={s.id}
+                type="button"
+                onClick={() => toggleAssignee(s.id)}
+                className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
+                  selectedAssignees.includes(s.id)
+                    ? 'bg-aas-blue text-white border-aas-blue'
+                    : 'bg-white text-gray-600 border-gray-200 hover:border-gray-400'
+                }`}
+              >
+                {s.full_name}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Customer */}
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">Customer</label>
+        <select value={customerId} onChange={e => handleCustomerChange(e.target.value)} className={inputClass}>
+          <option value="">— none —</option>
+          {customers.map(c => <option key={c.id} value={c.id}>{c.company_name}</option>)}
+        </select>
+      </div>
+
+      {/* Location — filtered by customer */}
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">
+          Location
+          {customerId && filteredLocations.length < locations.length && (
+            <span className="ml-1.5 text-xs font-normal text-gray-400">(filtered by customer)</span>
+          )}
+        </label>
+        <select value={locationId} onChange={e => setLocationId(e.target.value)} className={inputClass}>
+          <option value="">— none —</option>
+          {filteredLocations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
+        </select>
+      </div>
+
+      {/* Equipment */}
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">Equipment / Machine</label>
+        <select value={equipmentId} onChange={e => setEquipmentId(e.target.value)} className={inputClass}>
+          <option value="">— none —</option>
+          {equipment.map(eq => (
+            <option key={eq.id} value={eq.id}>
+              {eq.name}{eq.registration ? ` (${eq.registration})` : ''}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
+        <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={3} className={`${inputClass} resize-none`} />
+      </div>
+
+      <button
+        onClick={handleSave}
+        disabled={saving}
+        className="w-full py-3 bg-aas-blue text-white rounded-xl text-sm font-semibold hover:bg-aas-blue-dark disabled:opacity-60"
+      >
+        {saving ? 'Saving…' : 'Save changes'}
+      </button>
+    </div>
+  );
+}
