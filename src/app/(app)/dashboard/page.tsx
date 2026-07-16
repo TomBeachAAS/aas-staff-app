@@ -112,18 +112,32 @@ t.created_by === user.id || assignedIds.includes(t.id)
         <p className="text-sm text-gray-500">{format(new Date(), 'EEEE, d MMMM yyyy')}</p>
       </div>
 
-      <a
-        href="https://robotti.agrointelli.com/"
-        target="_blank"
-        rel="noopener noreferrer"
-        className="flex items-center justify-between bg-green-700 hover:bg-green-800 transition-colors rounded-xl px-4 py-3"
-      >
-        <div>
-          <p className="text-white font-semibold text-sm">Robotti Dashboard</p>
-          <p className="text-green-200 text-xs">robotti.agrointelli.com</p>
-        </div>
-        <ExternalLink size={18} className="text-green-300 shrink-0" />
-      </a>
+      <div className="grid grid-cols-2 gap-2">
+        <a
+          href="https://robotti.agrointelli.com/"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center justify-between bg-green-700 hover:bg-green-800 transition-colors rounded-xl px-4 py-3"
+        >
+          <div>
+            <p className="text-white font-semibold text-sm">Robotti Dashboard</p>
+            <p className="text-green-200 text-xs">robotti.agrointelli.com</p>
+          </div>
+          <ExternalLink size={18} className="text-green-300 shrink-0" />
+        </a>
+        <a
+          href="http://192.168.10.1:8888/"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center justify-between bg-green-800 hover:bg-green-900 transition-colors rounded-xl px-4 py-3"
+        >
+          <div>
+            <p className="text-white font-semibold text-sm">Robot Control</p>
+            <p className="text-green-200 text-xs">Local WiFi only</p>
+          </div>
+          <ExternalLink size={18} className="text-green-300 shrink-0" />
+        </a>
+      </div>
 
       <MotivationalBanner />
 
@@ -206,7 +220,7 @@ t.created_by === user.id || assignedIds.includes(t.id)
 
         {todayTasks.length === 0 && overdueTasks.length === 0 && (completedTasks ?? []).length === 0 && (
           <CardContent>
-            <p className="text-sm text-gray-400 text-center py-4">No tasks due — nice work!</p>
+            <p className="text-sm text-gray-400 text-center py-4">No tasks due â nice work!</p>
           </CardContent>
         )}
 
