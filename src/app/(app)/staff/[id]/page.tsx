@@ -7,7 +7,7 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { ROLE_LABELS } from '@/lib/utils';
 import { StaffActionButtons } from '@/components/staff/StaffActionButtons';
 import { WorkingPatternEditor } from '@/components/staff/WorkingPatternEditor';
-import { Clock } from 'lucide-react';
+import { Clock, CheckCircle2, XCircle } from 'lucide-react';
 
 export const dynamic = 'force-dynamic';
 
@@ -59,6 +59,15 @@ export default async function StaffDetailPage({ params }: { params: Promise<{ id
           <Row label="Department" value={profile.department} />
           {profile.start_date && <Row label="Start date" value={format(new Date(profile.start_date), 'd MMM yyyy')} />}
           {profile.end_date && <Row label="End date" value={format(new Date(profile.end_date), 'd MMM yyyy')} />}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader><CardTitle>Permissions</CardTitle></CardHeader>
+        <CardContent className="space-y-2">
+          <PermRow label="Timesheets" enabled={!!profile.timesheet_access} />
+          <PermRow label="Expenses" enabled={!!profile.expenses_access} />
+          <PermRow label="Holidays" enabled={!!profile.holiday_access} />
         </CardContent>
       </Card>
 
@@ -126,6 +135,23 @@ function Row({ label, value }: { label: string; value: string | null | undefined
     <div className="flex justify-between text-sm">
       <span className="text-gray-500">{label}</span>
       <span className="text-gray-800 font-medium">{value}</span>
+    </div>
+  );
+}
+
+function PermRow({ label, enabled }: { label: string; enabled: boolean }) {
+  return (
+    <div className="flex items-center justify-between text-sm">
+      <span className="text-gray-500">{label}</span>
+      {enabled ? (
+        <span className="flex items-center gap-1 text-green-600 font-medium">
+          <CheckCircle2 size={14} /> Enabled
+        </span>
+      ) : (
+        <span className="flex items-center gap-1 text-gray-400 font-medium">
+          <XCircle size={14} /> Disabled
+        </span>
+      )}
     </div>
   );
 }
