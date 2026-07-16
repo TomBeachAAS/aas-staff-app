@@ -21,7 +21,7 @@ export default async function NewTaskPage({
   ] = await Promise.all([
     supabase.from('profiles').select('id, full_name').eq('status', 'active').order('full_name'),
     supabase.from('customers').select('id, company_name').eq('is_active', true).order('company_name'),
-    supabase.from('locations').select('id, name').eq('is_active', true).order('name'),
+    supabase.from('locations').select('id, name, customer_id').eq('is_active', true).order('name'),
     supabase.from('equipment').select('id, name, type, registration').eq('is_active', true).order('name'),
   ]);
 
