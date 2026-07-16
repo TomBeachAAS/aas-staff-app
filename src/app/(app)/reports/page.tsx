@@ -403,11 +403,11 @@ export default function ReportsPage() {
 
 // ── Sub-components ─────────────────────────────────────────
 
-function SummaryCard({ icon: Icon, label, value, bg }: {
-  icon: ElementType; label: string; value: string; bg: string;
+
+function SummaryCard({ icon: Icon, label, value, bg, href }: {
 }) {
   return (
-    <div className={`rounded-xl p-4 flex items-center gap-3 ${bg} text-white`}>
+      icon: ElementType; label: string; value: string; bg: string; href?: string;
       <Icon size={20} className="shrink-0 opacity-90" />
       <div>
         <p className="text-xs opacity-80">{label}</p>
