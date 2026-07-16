@@ -1,4 +1,4 @@
-'use client';
+function SummaryCard({ icon: Icon, label, value, bg, href }: {
 
 import { useState, useEffect, useCallback, type ElementType } from 'react';
 import {
