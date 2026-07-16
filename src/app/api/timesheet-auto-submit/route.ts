@@ -121,7 +121,7 @@ export async function GET(request: Request) {
         title: 'Timesheet submitted',
         body: `Your timesheet for ${weekLabel} has been automatically submitted. If your hours look wrong, speak to your manager.`,
         link: `/timesheets?week=${weekStartStr}`,
-        read: false,
+        is_read: false,
       });
 
       processed++;
