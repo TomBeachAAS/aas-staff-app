@@ -18,9 +18,25 @@ export function NotificationPrompt() {
   const [loading, setLoading] = useState(false);
   const [supported, setSupported] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [iosNotStandalone, setIosNotStandalone] = useState(false);
 
   useEffect(() => {
-    if (typeof window !== 'undefined' && 'Notification' in window && 'serviceWorker' in navigator && 'PushManager' in window) {
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+    const isStandalone =
+      window.matchMedia('(display-mode: standalone)').matches ||
+      (window.navigator as any).standalone === true;
+
+    if (isIOS && !isStandalone) {
+      setIosNotStandalone(true);
+      return;
+    }
+
+    if (
+      typeof window !== 'undefined' &&
+      'Notification' in window &&
+      'serviceWorker' in navigator &&
+      'PushManager' in window
+    ) {
       setSupported(true);
       setPermission(Notification.permission);
       navigator.serviceWorker.ready.then(reg => {
@@ -32,9 +48,18 @@ export function NotificationPrompt() {
   async function subscribe() {
     setLoading(true);
     setError(null);
+
+    let timedOut = false;
+    const timer = setTimeout(() => {
+      timedOut = true;
+      setError('Request timed out. Check that notifications are allowed for this site in your device settings, then try again.');
+      setLoading(false);
+    }, 15000);
+
     try {
       const vapidKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
       if (!vapidKey) {
+        clearTimeout(timer);
         setError('Push notifications are not configured yet. Contact your administrator.');
         setLoading(false);
         return;
@@ -42,7 +67,11 @@ export function NotificationPrompt() {
 
       const perm = await Notification.requestPermission();
       setPermission(perm);
-      if (perm !== 'granted') { setLoading(false); return; }
+      if (perm !== 'granted') {
+        clearTimeout(timer);
+        setLoading(false);
+        return;
+      }
 
       const reg = await navigator.serviceWorker.ready;
       const sub = await reg.pushManager.subscribe({
@@ -61,12 +90,16 @@ export function NotificationPrompt() {
         throw new Error(json.error || 'Failed to save subscription');
       }
 
+      clearTimeout(timer);
       setSubscribed(true);
     } catch (err: any) {
-      console.error('Push subscription failed:', err);
-      setError(err?.message ?? 'Could not enable notifications. Try again.');
+      clearTimeout(timer);
+      if (!timedOut) {
+        console.error('Push subscription failed:', err);
+        setError(err?.message ?? 'Could not enable notifications. Try again.');
+      }
     }
-    setLoading(false);
+    if (!timedOut) setLoading(false);
   }
 
   async function unsubscribe() {
@@ -91,6 +124,23 @@ export function NotificationPrompt() {
     setLoading(false);
   }
 
+  // iOS Safari only supports push when installed as a PWA
+  if (iosNotStandalone) {
+    return (
+      <div className="bg-white rounded-xl border border-gray-100 p-4 space-y-2">
+        <div className="flex items-center gap-2">
+          <Bell size={18} className="text-aas-blue" />
+          <h3 className="text-sm font-semibold text-gray-800">Push notifications</h3>
+        </div>
+        <p className="text-xs text-gray-500">
+          On iPhone, notifications require the app to be installed. Tap the{' '}
+          <span className="font-medium text-gray-700">Share</span> button in Safari, then{' '}
+          <span className="font-medium text-gray-700">Add to Home Screen</span>, and open the app from there.
+        </p>
+      </div>
+    );
+  }
+
   if (!supported) return null;
 
   return (
@@ -113,33 +163,24 @@ export function NotificationPrompt() {
         </p>
       ) : subscribed ? (
         <div className="flex items-center justify-between">
-          <p className="text-sm text-green-600 font-medium">✓ Enabled on this device</p>
+          <p className="text-sm text-green-600 font-medium">&#10003; Enabled on this device</p>
           <button
             onClick={unsubscribe}
             disabled={loading}
             className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-red-500 transition-colors"
           >
             <BellOff size={13} />
-            {loading ? 'Disabling…' : 'Disable'}
+            {loading ? 'Disabling...' : 'Disable'}
           </button>
         </div>
       ) : (
-        <>
-          <p className="text-sm text-gray-500">
-            Get notified when tasks are assigned to you, holidays are approved, and more.
-          </p>
-          <p className="text-xs text-amber-600">
-            iPhone: you must add this app to your home screen first, then open it from there.
-          </p>
-          <button
-            onClick={subscribe}
-            disabled={loading}
-            className="flex items-center gap-2 px-4 py-2 bg-aas-blue text-white rounded-lg text-sm font-medium hover:bg-aas-blue-dark transition-colors disabled:opacity-60"
-          >
-            <Bell size={14} />
-            {loading ? 'Enabling…' : 'Enable notifications'}
-          </button>
-        </>
+        <button
+          onClick={subscribe}
+          disabled={loading}
+          className="w-full py-2 px-4 bg-aas-blue text-white text-sm font-medium rounded-lg hover:bg-aas-blue-dark transition-colors disabled:opacity-60"
+        >
+          {loading ? 'Enabling…' : 'Enable notifications'}
+        </button>
       )}
     </div>
   );
