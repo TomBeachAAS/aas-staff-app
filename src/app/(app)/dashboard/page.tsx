@@ -5,7 +5,7 @@ import { format, subDays, startOfWeek } from 'date-fns';
 import { Umbrella, CheckSquare, AlertCircle, CalendarX, TrendingUp, Briefcase, ExternalLink } from 'lucide-react';
 import { StatCard } from '@/components/ui/StatCard';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
-import { MotivationalBanner } from '@/components/dashboard/MotivationalBanner';
+import { MotivationalBanner } from '@/componentsh/dashboard/MotivationalBanner';
 import { WeatherWidget } from '@/components/dashboard/WeatherWidget';
 
 export const dynamic = 'force-dynamic'; // v2
@@ -60,7 +60,7 @@ export default async function DashboardPage() {
   const { data: completedTasks } = await supabase
     .from('tasks')
     .select('id, title, updated_at')
-    .eq('created_by', user.id)
+    .or(`created_by.eq.${user.id}${assignedIds.length>0?',id.in.('+assignedIds.join(',')+')':""`)
     .eq('status', 'completed')
     .gte('updated_at', sevenDaysAgoStart)
     .order('updated_at', { ascending: false })
