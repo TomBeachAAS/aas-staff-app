@@ -141,10 +141,16 @@ export default function EditEquipmentPage({ params }: { params: Promise<{ id: st
           </label>
         </div>
 
-        <button type="submit" disabled={pending}
-          className="w-full py-3 bg-aas-blue text-white rounded-xl text-sm font-semibold disabled:opacity-60">
-          {pending ? 'Saving…' : 'Save changes'}
-        </button>
+        <div className="flex gap-3">
+          <button type="button" onClick={() => router.back()}
+            className="flex-1 py-3 border border-gray-200 text-gray-600 rounded-xl text-sm font-semibold hover:bg-gray-50 transition-colors">
+            Cancel
+          </button>
+          <button type="submit" disabled={pending}
+            className="flex-1 py-3 bg-aas-blue text-white rounded-xl text-sm font-semibold disabled:opacity-60">
+            {pending ? 'Saving…' : 'Save changes'}
+          </button>
+        </div>
       </form>
 
       <button
