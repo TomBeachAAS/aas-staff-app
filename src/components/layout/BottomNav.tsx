@@ -13,14 +13,26 @@ const items = [
   { href: '/more', icon: MoreHorizontal, label: 'More' },
 ];
 
+// Routes covered by the main nav tabs — anything else highlights "More"
+const PRIMARY_PREFIXES = ['/dashboard', '/calendar', '/tasks', '/jobs', '/more'];
+
 export function BottomNav() {
   const pathname = usePathname();
+
+  // If the current path doesn't start with any primary prefix, "More" is active
+  const isMoreActive =
+    !PRIMARY_PREFIXES.some(prefix => pathname === prefix || pathname.startsWith(prefix + '/'));
 
   return (
     <nav className="lg:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 safe-bottom z-40">
       <div className="flex">
         {items.map(({ href, icon: Icon, label }) => {
-          const active = pathname === href || pathname.startsWith(href + '/');
+          let active: boolean;
+          if (href === '/more') {
+            active = isMoreActive || pathname === '/more' || pathname.startsWith('/more/');
+          } else {
+            active = pathname === href || pathname.startsWith(href + '/');
+          }
           return (
             <Link
               key={href}
