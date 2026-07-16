@@ -8,7 +8,7 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { MotivationalBanner } from '@/components/dashboard/MotivationalBanner';
 import { WeatherWidget } from '@/components/dashboard/WeatherWidget';
 
-export const dynamic = 'force-dynamic';
+export const dynamic = 'force-dynamic'; // v2
 
 export default async function DashboardPage() {
   const supabase = await createClient();
