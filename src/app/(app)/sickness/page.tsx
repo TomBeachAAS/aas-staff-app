@@ -6,6 +6,15 @@ import { Plus, Pencil, Trash2, X, Check } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 
+const SICKNESS_TYPES: { value: string; label: string }[] = [
+  { value: 'sick', label: 'General illness' },
+  { value: 'injury', label: 'Injury' },
+  { value: 'hospital', label: 'Hospital / surgery' },
+  { value: 'medical', label: 'Medical appointment' },
+  { value: 'mental_health', label: 'Mental health' },
+  { value: 'other', label: 'Other' },
+];
+
 export default function SicknessPage() {
   const [records, setRecords] = useState<any[]>([]);
   const [profileMap, setProfileMap] = useState<Record<string, string>>({});
@@ -19,6 +28,7 @@ export default function SicknessPage() {
   const [addUserId, setAddUserId] = useState('');
   const [addStart, setAddStart] = useState(format(new Date(), 'yyyy-MM-dd'));
   const [addEnd, setAddEnd] = useState('');
+  const [addType, setAddType] = useState('sick');
   const [addNotes, setAddNotes] = useState('');
   const [saving, setSaving] = useState(false);
 
@@ -26,6 +36,7 @@ export default function SicknessPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editStart, setEditStart] = useState('');
   const [editEnd, setEditEnd] = useState('');
+  const [editType, setEditType] = useState('sick');
   const [editNotes, setEditNotes] = useState('');
   const [editSaving, setEditSaving] = useState(false);
 
@@ -46,7 +57,6 @@ export default function SicknessPage() {
     setCurrentUserId(user.id);
     setAddUserId(user.id);
 
-    // Two-step fetch — sickness_records has user_id AND entered_by both FK to profiles
     let query = supabase
       .from('sickness_records')
       .select('id, user_id, entered_by, start_date, end_date, sickness_type, private_notes, created_at')
@@ -91,13 +101,14 @@ export default function SicknessPage() {
       entered_by: user.id,
       start_date: addStart,
       end_date: addEnd || null,
-      sickness_type: 'sick',
+      sickness_type: addType,
       private_notes: addNotes || null,
     });
     setShowForm(false);
     setAddNotes('');
     setAddEnd('');
-    setAddUserId(user.id);
+    setAddType('sick');
+    setAddUserId(currentUserId);
     setSaving(false);
     loadData();
   }
@@ -106,6 +117,7 @@ export default function SicknessPage() {
     setEditingId(record.id);
     setEditStart(record.start_date);
     setEditEnd(record.end_date ?? '');
+    setEditType(record.sickness_type ?? 'sick');
     setEditNotes(record.private_notes ?? '');
     setDeleteConfirmId(null);
   }
@@ -116,6 +128,7 @@ export default function SicknessPage() {
     await supabase.from('sickness_records').update({
       start_date: editStart,
       end_date: editEnd || null,
+      sickness_type: editType,
       private_notes: editNotes || null,
     }).eq('id', id);
     setEditingId(null);
@@ -135,6 +148,10 @@ export default function SicknessPage() {
   function dayCount(start: string, end: string | null) {
     const endDate = end ? new Date(end) : new Date();
     return differenceInCalendarDays(endDate, new Date(start)) + 1;
+  }
+
+  function typeLabel(val: string) {
+    return SICKNESS_TYPES.find(t => t.value === val)?.label ?? val;
   }
 
   const inputClass = 'w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-aas-blue';
@@ -173,6 +190,14 @@ export default function SicknessPage() {
                   </select>
                 </div>
               )}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Type of absence</label>
+                <select value={addType} onChange={e => setAddType(e.target.value)} className={inputClass}>
+                  {SICKNESS_TYPES.map(t => (
+                    <option key={t.value} value={t.value}>{t.label}</option>
+                  ))}
+                </select>
+              </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">First day absent</label>
@@ -216,6 +241,14 @@ export default function SicknessPage() {
                     {isManager && (
                       <p className="text-xs font-semibold text-aas-blue mb-2">{name}</p>
                     )}
+                    <div className="mb-2">
+                      <label className="block text-xs text-gray-500 mb-0.5">Type of absence</label>
+                      <select value={editType} onChange={e => setEditType(e.target.value)} className={inputClass}>
+                        {SICKNESS_TYPES.map(t => (
+                          <option key={t.value} value={t.value}>{t.label}</option>
+                        ))}
+                      </select>
+                    </div>
                     <div className="grid grid-cols-2 gap-2 mb-2">
                       <div>
                         <label className="block text-xs text-gray-500 mb-0.5">First day</label>
@@ -251,15 +284,22 @@ export default function SicknessPage() {
                   )}
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm text-gray-800">
-                        {format(new Date(r.start_date), 'd MMM yyyy')}
-                        {r.end_date
-                          ? ` – ${format(new Date(r.end_date), 'd MMM yyyy')}`
-                          : ' (ongoing)'}
-                        <span className="text-xs text-gray-400 ml-2">
-                          {days} {days === 1 ? 'day' : 'days'}{!r.end_date ? ' so far' : ''}
-                        </span>
-                      </p>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="text-sm text-gray-800">
+                          {format(new Date(r.start_date), 'd MMM yyyy')}
+                          {r.end_date
+                            ? ` – ${format(new Date(r.end_date), 'd MMM yyyy')}`
+                            : ' (ongoing)'}
+                          <span className="text-xs text-gray-400 ml-2">
+                            {days} {days === 1 ? 'day' : 'days'}{!r.end_date ? ' so far' : ''}
+                          </span>
+                        </p>
+                        {r.sickness_type && r.sickness_type !== 'sick' && (
+                          <span className="text-xs bg-red-50 text-red-700 border border-red-100 px-2 py-0.5 rounded-full">
+                            {typeLabel(r.sickness_type)}
+                          </span>
+                        )}
+                      </div>
                       {isManager && r.private_notes && (
                         <p className="text-xs text-gray-500 mt-0.5 italic">{r.private_notes}</p>
                       )}
@@ -317,4 +357,4 @@ export default function SicknessPage() {
       </Card>
     </div>
   );
-}
+    }
