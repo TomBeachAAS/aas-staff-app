@@ -11,8 +11,8 @@ interface Props {
   initialDate?: string;
   staff: { id: string; full_name: string }[];
   customers: { id: string; company_name: string }[];
-  locations: { id: string; name: string }[];
-  equipment: { id: string; name: string; type: string | null; registration: string | null }[];
+  locations: { id: string; name: string; customer_id?: string | null }[];
+  equipment: { id: string; name: string; type: string; registration: string | null }[];
 }
 
 const JOB_TYPES = ['RaaS', 'Service', 'Demo', 'Delivery', 'Mapping', 'Consultancy'];
@@ -41,6 +41,22 @@ export function NewTaskForm({ userId, initialDate, staff, customers: initialCust
   const [locations, setLocations] = useState(initialLocations);
   const [equipment, setEquipment] = useState(initialEquipment);
 
+  // Filter locations by selected customer (show all if no customer, or unlinked + matched)
+  const filteredLocations = customerId
+    ? locations.filter(l => !l.customer_id || l.customer_id === customerId)
+    : locations;
+
+  function handleCustomerChange(newCustomerId: string) {
+    setCustomerId(newCustomerId);
+    // Clear location if it belongs to a different customer
+    if (locationId) {
+      const loc = locations.find(l => l.id === locationId);
+      if (loc && loc.customer_id && loc.customer_id !== newCustomerId) {
+        setLocationId('');
+      }
+    }
+  }
+
   // New customer modal
   const [showNewCustomer, setShowNewCustomer] = useState(false);
   const [newCompanyName, setNewCompanyName] = useState('');
@@ -62,8 +78,8 @@ export function NewTaskForm({ userId, initialDate, staff, customers: initialCust
   // New equipment modal
   const [showNewEquipment, setShowNewEquipment] = useState(false);
   const [newEqName, setNewEqName] = useState('');
-  const [newEqType, setNewEqType] = useState<'machine' | 'vehicle'>('machine');
   const [newEqReg, setNewEqReg] = useState('');
+  const [newEqType, setNewEqType] = useState('machine');
   const [savingEquipment, setSavingEquipment] = useState(false);
   const [equipmentError, setEquipmentError] = useState('');
 
@@ -100,7 +116,7 @@ export function NewTaskForm({ userId, initialDate, staff, customers: initialCust
       town: newLocTown || null,
       postcode: newLocPostcode || null,
       customer_id: customerId || null,
-    }).select('id, name').single();
+    }).select('id, name, customer_id').single();
     if (err || !data) { setLocationError(err?.message ?? 'Failed to save'); setSavingLocation(false); return; }
     setLocations(prev => [...prev, data].sort((a, b) => a.name.localeCompare(b.name)));
     setLocationId(data.id);
@@ -112,21 +128,28 @@ export function NewTaskForm({ userId, initialDate, staff, customers: initialCust
   async function saveNewEquipment() {
     if (!newEqName.trim()) { setEquipmentError('Name is required.'); return; }
     setSavingEquipment(true); setEquipmentError('');
-    try {
-      const res = await fetch('/api/equipment', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: newEqName.trim(), type: newEqType, registration: newEqReg || null }),
-      });
-      const data = await res.json();
-      if (!res.ok) { setEquipmentError(data.error ?? 'Failed to save'); setSavingEquipment(false); return; }
-      const newItem = { id: data.id, name: newEqName.trim(), type: newEqType, registration: newEqReg || null };
-      setEquipment(prev => [...prev, newItem].sort((a, b) => a.name.localeCompare(b.name)));
-      setEquipmentId(data.id);
-      setShowNewEquipment(false);
-      setNewEqName(''); setNewEqReg('');
+    const res = await fetch('/api/equipment', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: newEqName.trim(),
+        registration: newEqReg || null,
+        type: newEqType,
+        is_active: true,
+      }),
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      setEquipmentError(body.error ?? 'Failed to save');
       setSavingEquipment(false);
-    } catch { setEquipmentError('Network error'); setSavingEquipment(false); }
+      return;
+    }
+    const data = await res.json();
+    setEquipment(prev => [...prev, data].sort((a: any, b: any) => a.name.localeCompare(b.name)));
+    setEquipmentId(data.id);
+    setShowNewEquipment(false);
+    setNewEqName(''); setNewEqReg(''); setNewEqType('machine');
+    setSavingEquipment(false);
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -146,7 +169,7 @@ export function NewTaskForm({ userId, initialDate, staff, customers: initialCust
       customer_id: customerId || null,
       location_id: locationId || null,
       equipment_id: equipmentId || null,
-      notes: [jobType ? 'Job type: ' + jobType : '', notes].filter(Boolean).join('\n') || null,
+      notes: [jobType ? `Job type: ${jobType}` : '', notes].filter(Boolean).join('\n') || null,
       auto_rollover: autoRollover,
       created_by: userId,
     }).select().single();
@@ -171,7 +194,10 @@ export function NewTaskForm({ userId, initialDate, staff, customers: initialCust
     fetch('/api/notify', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ type: 'task_assigned', data: { taskTitle: title, assignees, assignedBy: userId } }),
+      body: JSON.stringify({
+        type: 'task_assigned',
+        data: { taskTitle: title, assignees, assignedBy: userId },
+      }),
     });
 
     router.push('/tasks');
@@ -191,7 +217,7 @@ export function NewTaskForm({ userId, initialDate, staff, customers: initialCust
 
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
-          <textarea value={description} onChange={e => setDescription(e.target.value)} rows={3} className={inputClass + ' resize-none'} />
+          <textarea value={description} onChange={e => setDescription(e.target.value)} rows={3} className={`${inputClass} resize-none`} />
         </div>
 
         <div>
@@ -199,8 +225,9 @@ export function NewTaskForm({ userId, initialDate, staff, customers: initialCust
           <div className="flex flex-wrap gap-2">
             {JOB_TYPES.map(type => (
               <button key={type} type="button" onClick={() => setJobType(jobType === type ? '' : type)}
-                className={'px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ' +
-                  (jobType === type ? 'bg-aas-blue text-white border-aas-blue' : 'bg-white text-gray-600 border-gray-300 hover:border-aas-blue hover:text-aas-blue')}>
+                className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
+                  jobType === type ? 'bg-aas-blue text-white border-aas-blue' : 'bg-white text-gray-600 border-gray-300 hover:border-aas-blue hover:text-aas-blue'
+                }`}>
                 {type}
               </button>
             ))}
@@ -250,16 +277,18 @@ export function NewTaskForm({ userId, initialDate, staff, customers: initialCust
               <Plus size={12} /> Add new
             </button>
           </div>
-          <select value={customerId} onChange={e => setCustomerId(e.target.value)} className={inputClass}>
+          <select value={customerId} onChange={e => handleCustomerChange(e.target.value)} className={inputClass}>
             <option value="">— none —</option>
             {customers.map(c => <option key={c.id} value={c.id}>{c.company_name}</option>)}
           </select>
         </div>
 
-        {/* Location */}
+        {/* Location — filtered by customer */}
         <div>
           <div className="flex items-center justify-between mb-1">
-            <label className="text-sm font-medium text-gray-700">Location</label>
+            <label className="text-sm font-medium text-gray-700">
+              Location{customerId ? ' (filtered by customer)' : ''}
+            </label>
             <button type="button" onClick={() => { setShowNewLocation(true); setLocationError(''); }}
               className="flex items-center gap-1 text-xs text-aas-blue hover:underline">
               <Plus size={12} /> Add new
@@ -267,11 +296,11 @@ export function NewTaskForm({ userId, initialDate, staff, customers: initialCust
           </div>
           <select value={locationId} onChange={e => setLocationId(e.target.value)} className={inputClass}>
             <option value="">— none —</option>
-            {locations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
+            {filteredLocations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
           </select>
         </div>
 
-        {/* Vehicle / Equipment */}
+        {/* Equipment */}
         <div>
           <div className="flex items-center justify-between mb-1">
             <label className="text-sm font-medium text-gray-700">Vehicle / Equipment</label>
@@ -282,11 +311,7 @@ export function NewTaskForm({ userId, initialDate, staff, customers: initialCust
           </div>
           <select value={equipmentId} onChange={e => setEquipmentId(e.target.value)} className={inputClass}>
             <option value="">— none —</option>
-            {equipment.map(eq => (
-              <option key={eq.id} value={eq.id}>
-                {eq.name}{eq.registration ? ' (' + eq.registration + ')' : ''}
-              </option>
-            ))}
+            {equipment.map(v => <option key={v.id} value={v.id}>{v.name}{v.registration ? ` (${v.registration})` : ''}</option>)}
           </select>
         </div>
 
@@ -307,7 +332,7 @@ export function NewTaskForm({ userId, initialDate, staff, customers: initialCust
 
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
-          <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2} className={inputClass + ' resize-none'} />
+          <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2} className={`${inputClass} resize-none`} />
         </div>
 
         <label className="flex items-center gap-2 cursor-pointer select-none">
@@ -410,33 +435,26 @@ export function NewTaskForm({ userId, initialDate, staff, customers: initialCust
           <div className="absolute inset-0 bg-black/40" onClick={() => setShowNewEquipment(false)} />
           <div className="relative w-full sm:max-w-sm bg-white rounded-t-2xl sm:rounded-2xl shadow-xl">
             <div className="flex items-center justify-between px-4 pt-4 pb-3 border-b border-gray-100">
-              <h3 className="text-base font-bold text-gray-800">Add vehicle / equipment</h3>
+              <h3 className="text-base font-bold text-gray-800">New vehicle / equipment</h3>
               <button onClick={() => setShowNewEquipment(false)} className="p-1 rounded-lg hover:bg-gray-100"><X size={18} /></button>
             </div>
             <div className="p-4 space-y-3">
               {equipmentError && <div className="p-2 rounded-lg bg-red-50 text-sm text-red-700">{equipmentError}</div>}
-              <div className="grid grid-cols-2 gap-2">
-                {(['machine', 'vehicle'] as const).map(t => (
-                  <button key={t} type="button" onClick={() => setNewEqType(t)}
-                    className={'py-2 rounded-lg text-sm font-medium border-2 transition-colors ' +
-                      (newEqType === t ? 'border-aas-blue bg-aas-blue text-white' : 'border-gray-200 text-gray-500')}>
-                    {t === 'machine' ? 'Machine' : 'Vehicle'}
-                  </button>
-                ))}
-              </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Name *</label>
-                <input value={newEqName} onChange={e => setNewEqName(e.target.value)}
-                  placeholder={newEqType === 'vehicle' ? 'e.g. Transit Van 1' : 'e.g. Robotti 150F #1'}
-                  className={inputClass} autoFocus />
+                <input value={newEqName} onChange={e => setNewEqName(e.target.value)} placeholder="e.g. Sprayer 1" className={inputClass} autoFocus />
               </div>
-              {newEqType === 'vehicle' && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Registration</label>
-                  <input value={newEqReg} onChange={e => setNewEqReg(e.target.value)} placeholder="e.g. AB12 CDE" className={inputClass} />
-                </div>
-              )}
-              <p className="text-xs text-gray-400">You can add make, model, year and more from the Equipment page.</p>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Type</label>
+                <select value={newEqType} onChange={e => setNewEqType(e.target.value)} className={inputClass}>
+                  <option value="vehicle">Vehicle</option>
+                  <option value="machine">Machine</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Registration / Serial</label>
+                <input value={newEqReg} onChange={e => setNewEqReg(e.target.value)} placeholder="Optional" className={inputClass} />
+              </div>
             </div>
             <div className="flex gap-3 px-4 pb-4">
               <button type="button" onClick={() => setShowNewEquipment(false)} className="flex-1 py-2.5 border border-gray-200 rounded-lg text-sm text-gray-600">Cancel</button>
