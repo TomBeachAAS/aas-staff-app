@@ -124,7 +124,7 @@ export default async function HolidayDetailPage({
             Approve
           </Link>
           <Link
-            href={`/holidays/${id}/approve`}
+            href={`/holidays/${id}/reject`}
             className="flex-1 text-center py-2.5 border border-red-200 text-red-600 rounded-xl text-sm font-medium hover:bg-red-50 transition-colors"
           >
             Reject
