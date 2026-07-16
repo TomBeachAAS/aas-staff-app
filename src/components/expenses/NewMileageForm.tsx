@@ -4,7 +4,7 @@ import { useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { format } from 'date-fns';
 import { createClient } from '@/lib/supabase/client';
-import { Camera, X, Image } from 'lucide-react';
+import { Camera, X, Image, MapPin } from 'lucide-react';
 
 export function NewMileageForm({ userId, ratePerMile }: { userId: string; ratePerMile: number }) {
   const router = useRouter();
@@ -44,6 +44,10 @@ export function NewMileageForm({ userId, ratePerMile }: { userId: string; ratePe
 
   const amount = form.distance_miles ? (parseFloat(form.distance_miles) * ratePerMile).toFixed(2) : '0.00';
 
+  const mapsUrl = form.from_location && form.to_location
+    ? `https://www.google.com/maps/dir/${encodeURIComponent(form.from_location)}/${encodeURIComponent(form.to_location)}`
+    : null;
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!form.from_location || !form.to_location || !form.distance_miles || !form.business_reason) {
@@ -75,34 +79,50 @@ export function NewMileageForm({ userId, ratePerMile }: { userId: string; ratePe
     router.push('/mileage');
   }
 
+  const inp = 'w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-aas-blue';
+
   return (
     <form onSubmit={handleSubmit} className="space-y-4 bg-white rounded-xl border border-gray-100 p-4">
       {error && <div className="p-3 rounded-lg bg-red-50 text-sm text-red-700">{error}</div>}
 
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
-        <input type="date" value={form.claim_date} onChange={e => set('claim_date', e.target.value)} required className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-aas-blue" />
+        <input type="date" value={form.claim_date} onChange={e => set('claim_date', e.target.value)} required className={inp} />
       </div>
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-1">From *</label>
-        <input value={form.from_location} onChange={e => set('from_location', e.target.value)} required placeholder="e.g. AAS Office, Lincoln" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-aas-blue" />
+        <input value={form.from_location} onChange={e => set('from_location', e.target.value)} required placeholder="e.g. AAS Office, Lincoln" className={inp} />
       </div>
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-1">To *</label>
-        <input value={form.to_location} onChange={e => set('to_location', e.target.value)} required placeholder="e.g. Customer Farm, Boston" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-aas-blue" />
+        <input value={form.to_location} onChange={e => set('to_location', e.target.value)} required placeholder="e.g. Customer Farm, Boston" className={inp} />
       </div>
+
+      {/* Distance helper */}
+      {mapsUrl && (
+        <a
+          href={mapsUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center gap-1.5 text-xs text-aas-blue hover:underline"
+        >
+          <MapPin size={12} />
+          Open route in Google Maps to check distance
+        </a>
+      )}
+
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-1">Business reason *</label>
-        <input value={form.business_reason} onChange={e => set('business_reason', e.target.value)} required className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-aas-blue" />
+        <input value={form.business_reason} onChange={e => set('business_reason', e.target.value)} required className={inp} />
       </div>
       <div className="grid grid-cols-2 gap-3">
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Distance (miles) *</label>
-          <input type="number" step="0.1" min="0" value={form.distance_miles} onChange={e => set('distance_miles', e.target.value)} required className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-aas-blue" />
+          <input type="number" step="0.1" min="0" value={form.distance_miles} onChange={e => set('distance_miles', e.target.value)} required className={inp} />
         </div>
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Vehicle reg</label>
-          <input value={form.vehicle_reg} onChange={e => set('vehicle_reg', e.target.value)} placeholder="AB12 CDE" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-aas-blue" />
+          <input value={form.vehicle_reg} onChange={e => set('vehicle_reg', e.target.value)} placeholder="AB12 CDE" className={inp} />
         </div>
       </div>
       {form.distance_miles && (
@@ -112,7 +132,7 @@ export function NewMileageForm({ userId, ratePerMile }: { userId: string; ratePe
       )}
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
-        <textarea value={form.notes} onChange={e => set('notes', e.target.value)} rows={2} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-aas-blue resize-none" />
+        <textarea value={form.notes} onChange={e => set('notes', e.target.value)} rows={2} className={inp + ' resize-none'} />
       </div>
 
       <div>
