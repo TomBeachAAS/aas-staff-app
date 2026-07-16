@@ -153,4 +153,4 @@ function PermRow({ label, enabled }: { label: string; enabled: boolean }) {
       )}
     </div>
   );
-                                                           }
+}
