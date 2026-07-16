@@ -33,6 +33,16 @@ export function MileageActions({ claimId, status, isOwner, isManagerOrAdmin, man
     setLoading(null);
   }
 
+  async function handleDelete() {
+    if (!confirm('Delete this mileage claim? This cannot be undone.')) return;
+    setLoading('delete');
+    setError('');
+    const supabase = createClient();
+    const { error: err } = await supabase.from('mileage_claims').delete().eq('id', claimId);
+    if (err) { setError(err.message); setLoading(null); return; }
+    router.push('/mileage');
+  }
+
   return (
     <div className="space-y-3">
       {error && <div className="p-3 rounded-lg bg-red-50 text-sm text-red-700">{error}</div>}
@@ -77,6 +87,12 @@ export function MileageActions({ claimId, status, isOwner, isManagerOrAdmin, man
           <p className="text-xs text-gray-400 mb-0.5">Manager notes</p>
           <p className="text-sm text-gray-700">{managerNotes}</p>
         </div>
+      )}
+
+      {isOwner && status === 'draft' && (
+        <button onClick={handleDelete} disabled={loading !== null} className="w-full py-2.5 border border-red-200 text-red-500 rounded-xl text-sm font-medium disabled:opacity-60 mt-1">
+          {loading === 'delete' ? 'Deleting…' : 'Delete claim'}
+        </button>
       )}
     </div>
   );
