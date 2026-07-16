@@ -83,7 +83,7 @@ export default async function ReportsPage() {
     supabase.from('expenses').select('amount, currency').eq('status', 'submitted'),
     supabase.from('expenses').select('amount, currency').eq('status', 'approved').gte('claim_date', thisMonthStart).lte('claim_date', thisMonthEnd),
     supabase.from('expenses').select('amount, currency').eq('status', 'approved').gte('claim_date', lastMonthStart).lte('claim_date', lastMonthEnd),
-    supabase.from('mileage_claims').select('calculated_amount').eq('status', 'approved').gte('claim_date', thisMonthStart).lte('claim_date', thisMonthEnd),
+    supabase.from('mileage_claims').select('calculated_amount').eq('status', 'paid').gte('claim_date', thisMonthStart).lte('claim_date', thisMonthEnd),
     supabase.from('tasks').select('*', { count: 'exact', head: true }).not('status', 'in', '("completed","cancelled")').lt('task_date', todayStr),
     supabase.from('tasks').select('*', { count: 'exact', head: true }).eq('status', 'completed').gte('task_date', thisMonthStart).lte('task_date', thisMonthEnd),
     supabase.from('sickness_records').select('*', { count: 'exact', head: true }).lte('start_date', todayStr).or(`end_date.is.null,end_date.gte.${todayStr}`),
