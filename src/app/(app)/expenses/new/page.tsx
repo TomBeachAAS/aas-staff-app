@@ -7,15 +7,13 @@ import { createClient } from '@/lib/supabase/client';
 import { EXPENSE_CATEGORY_LABELS } from '@/lib/utils';
 import { Camera, X, Image } from 'lucide-react';
 
-const CURRENCIES: Record<string, { symbol: string; label: string }> = {
-  GBP: { symbol: '£', label: 'GBP — British Pound' },
-  EUR: { symbol: '€', label: 'EUR — Euro' },
-  USD: { symbol: '$', label: 'USD — US Dollar' },
-  JPY: { symbol: '¥', label: 'JPY — Japanese Yen' },
-  CAD: { symbol: 'C$', label: 'CAD — Canadian Dollar' },
-  AUD: { symbol: 'A$', label: 'AUD — Australian Dollar' },
-  CHF: { symbol: 'Fr', label: 'CHF — Swiss Franc' },
-};
+const CURRENCIES = [
+  { code: 'GBP', symbol: '£', label: 'GBP (£)' },
+  { code: 'DKK', symbol: 'kr', label: 'DKK (kr)' },
+  { code: 'EUR', symbol: '€', label: 'EUR (€)' },
+  { code: 'USD', symbol: '$', label: 'USD ($)' },
+  { code: 'OTHER', symbol: '', label: 'Other' },
+] as const;
 
 export default function NewExpensePage() {
   const router = useRouter();
@@ -35,11 +33,11 @@ export default function NewExpensePage() {
   const [loading, setLoading] = useState<'draft' | 'submitted' | null>(null);
   const [error, setError] = useState('');
 
-  const currencySymbol = CURRENCIES[form.currency]?.symbol ?? form.currency;
-
   function set(key: string, value: string) {
     setForm(prev => ({ ...prev, [key]: value }));
   }
+
+  const currencySymbol = CURRENCIES.find(c => c.code === form.currency)?.symbol ?? '';
 
   function handleReceiptChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -126,20 +124,29 @@ export default function NewExpensePage() {
           <input value={form.description} onChange={e => set('description', e.target.value)} required placeholder="e.g. Fuel for site visit to Lincoln" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-aas-blue" />
         </div>
 
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid grid-cols-2 gap-2">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Currency</label>
             <select value={form.currency} onChange={e => set('currency', e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-aas-blue">
-              {Object.entries(CURRENCIES).map(([code, { label }]) => (
-                <option key={code} value={code}>{code}</option>
-              ))}
+              {CURRENCIES.map(c => <option key={c.code} value={c.code}>{c.label}</option>)}
             </select>
           </div>
-          <div className="col-span-2">
-            <label className="block text-sm font-medium text-gray-700 mb-1">Amount ({currencySymbol})</label>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Amount</label>
             <div className="relative">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">{currencySymbol}</span>
-              <input type="number" step="0.01" min="0" value={form.amount} onChange={e => set('amount', e.target.value)} required placeholder="0.00" className="w-full pl-7 pr-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-aas-blue" />
+              {currencySymbol && (
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">{currencySymbol}</span>
+              )}
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                value={form.amount}
+                onChange={e => set('amount', e.target.value)}
+                required
+                placeholder="0.00"
+                className={"w-full " + (currencySymbol ? 'pl-7' : 'pl-3') + " pr-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-aas-blue"}
+              />
             </div>
           </div>
         </div>
@@ -181,7 +188,7 @@ export default function NewExpensePage() {
             onClick={() => { submitIntentRef.current = 'submitted'; }}
             className="w-full py-3 bg-aas-blue text-white rounded-xl text-sm font-semibold disabled:opacity-60"
           >
-            {loading === 'submitted' ? (receipt ? 'Uploading…' : 'Submitting…') : 'Submit for approval'}
+            {loading === 'submitted' ? (receipt ? 'Uploading...' : 'Submitting...') : 'Submit for approval'}
           </button>
           <div className="flex gap-3">
             <button type="button" onClick={() => router.back()} className="flex-1 py-2.5 border border-gray-200 rounded-lg text-sm text-gray-600">
@@ -193,7 +200,7 @@ export default function NewExpensePage() {
               onClick={() => { submitIntentRef.current = 'draft'; }}
               className="flex-1 py-2.5 border border-gray-200 rounded-lg text-sm text-gray-500 disabled:opacity-60"
             >
-              {loading === 'draft' ? 'Saving…' : 'Save as draft'}
+              {loading === 'draft' ? 'Saving...' : 'Save as draft'}
             </button>
           </div>
         </div>
