@@ -6,41 +6,43 @@ interface TickerEvent {
   event_type?: string | null;
 }
 
-interface DashboardTickerProps {
-  events: TickerEvent[];
-  nextTask?: string | null;
+interface TickerTask {
+  id: string;
+  title: string;
+  task_date?: string | null;
 }
 
-export function DashboardTicker({ events, nextTask }: DashboardTickerProps) {
+interface DashboardTickerProps {
+  events: TickerEvent[];
+  overdueTasks?: TickerTask[];
+  todayTasks?: TickerTask[];
+}
+
+export function DashboardTicker({ events, overdueTasks = [], todayTasks = [] }: DashboardTickerProps) {
   const parts: string[] = [];
 
   events.forEach(e => {
     const label = e.title || e.event_type?.replace(/_/g, ' ');
-    if (label) parts.push('CALENDAR ' + label);
+    if (label) parts.push('\uD83D\uDCC5 ' + label);
   });
 
-  if (nextTask) {
-    parts.push('LIGHTNING Next: ' + nextTask);
-  }
+  overdueTasks.forEach(t => {
+    parts.push('\uD83D\uDD34 Overdue: ' + t.title);
+  });
+
+  todayTasks.forEach(t => {
+    parts.push('\u26A1 ' + t.title);
+  });
 
   if (parts.length === 0) return null;
 
-  // Build display text (replace placeholder tokens with symbols)
-  const segment = parts
-    .map(p => p.replace('CALENDAR ', '📅 ').replace('LIGHTNING ', '⚡ '))
-    .join('     ·     ');
-
+  const segment = parts.join('  \u00B7  ');
   const charLen = segment.length;
   const duration = Math.max(12, charLen * 0.18).toFixed(1) + 's';
 
   return (
     <>
-      <style>{
-        '@keyframes aas-ticker {' +
-        '  from { transform: translateX(0); }' +
-        '  to   { transform: translateX(-50%); }' +
-        '}'
-      }</style>
+      <style>{`@keyframes aas-ticker { from { transform: translateX(0); } to { transform: translateX(-50%); } }`}</style>
       <div className="bg-aas-blue rounded-xl overflow-hidden flex items-center h-9">
         <div className="bg-aas-blue-dark px-3 h-full flex items-center shrink-0">
           <span className="text-white text-xs font-black tracking-widest uppercase">Today</span>
