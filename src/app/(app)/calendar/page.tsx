@@ -1,6 +1,6 @@
 import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
-import { MobileCalendarView } from '@/components/calendar/MobileCalendarView';
+import { CalendarView } from '@/components/calendar/CalendarView';
 import { getEffectiveUser } from '@/lib/effective-user';
 
 export const dynamic = 'force-dynamic';
@@ -33,9 +33,10 @@ export default async function CalendarPage({
       : (await supabase.from('profiles').select('*').eq('id', effectiveUserId).single()).data ?? realProfile;
 
   const sp = await searchParams;
-  const view = (sp.view ?? 'month') as 'day' | 'week' | 'month' | 'timeline';
+  const view = (sp.view ?? 'week') as 'day' | 'week' | 'month' | 'timeline';
   const dateStr = sp.date ?? new Date().toISOString().split('T')[0];
 
+  // Always fetch all staff — needed for name display for all roles
   const { data: allStaff } = await supabase
     .from('profiles')
     .select('id, full_name, role')
@@ -49,7 +50,7 @@ export default async function CalendarPage({
 
   return (
     <div className="h-full flex flex-col">
-      <MobileCalendarView
+      <CalendarView
         currentUserId={effectiveUserId}
         profile={effectiveProfile}
         initialView={view}
