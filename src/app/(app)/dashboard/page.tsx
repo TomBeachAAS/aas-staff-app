@@ -7,6 +7,7 @@ import { StatCard } from '@/components/ui/StatCard';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { MotivationalBanner } from '@/components/dashboard/MotivationalBanner';
 import { WeatherWidget } from '@/components/dashboard/WeatherWidget';
+import { DashboardTicker } from '@/components/dashboard/DashboardTicker';
 
 export const dynamic = 'force-dynamic'; // v2
 
@@ -140,6 +141,8 @@ t.created_by === user.id || assignedIds.includes(t.id)
       </div>
 
       <MotivationalBanner />
+
+      <DashboardTicker events={todayEvents ?? []} nextTask={myTasks?.[0]?.title} />
 
       <WeatherWidget />
 
