@@ -12,6 +12,7 @@ pending_approval: 'Pending approval',
 open: 'Open',
 in_progress: 'In progress',
 completed: 'Completed',
+rejected: 'Rejected',
 };
 
 const STATUS_COLOURS: Record<string, string> = {
@@ -19,6 +20,7 @@ pending_approval: 'bg-amber-100 text-amber-800',
 open: 'bg-blue-100 text-blue-800',
 in_progress: 'bg-violet-100 text-violet-800',
 completed: 'bg-green-100 text-green-800',
+rejected: 'bg-red-100 text-red-800',
 };
 
 const PRIORITY_COLOURS: Record<string, string> = {
@@ -134,6 +136,13 @@ Edit
 </div>
 )}
 </div>
+
+{job.rejection_reason && (
+<div className="rounded-xl border border-red-100 bg-red-50 px-4 py-3">
+<p className="text-xs font-semibold text-red-700 mb-1">Rejection reason</p>
+<p className="text-sm text-red-800 whitespace-pre-wrap">{job.rejection_reason}</p>
+</div>
+)}
 
 {job.completion_notes && (
 <div className="rounded-xl border border-green-100 bg-green-50 px-4 py-3">
