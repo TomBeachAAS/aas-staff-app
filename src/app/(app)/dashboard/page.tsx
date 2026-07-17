@@ -142,7 +142,7 @@ t.created_by === user.id || assignedIds.includes(t.id)
 
       <MotivationalBanner />
 
-      <DashboardTicker events={todayEvents ?? []} nextTask={myTasks?.[0]?.title} />
+      <DashboardTicker events={todayEvents ?? []} overdueTasks={overdueTasks} todayTasks={todayTasks} />
 
       <WeatherWidget />
 
