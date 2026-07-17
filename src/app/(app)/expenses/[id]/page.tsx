@@ -2,7 +2,7 @@ import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { format } from 'date-fns';
-import { ArrowLeft, Receipt } from 'lucide-react';
+import { ArrowLeft, Receipt, Pencil } from 'lucide-react';
 import { EXPENSE_CATEGORY_LABELS } from '@/lib/utils';
 import { ExpenseActions } from '@/components/expenses/ExpenseActions';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
@@ -56,7 +56,12 @@ export default async function ExpenseDetailPage({
         <Link href="/expenses" className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
           <ArrowLeft size={18} className="text-gray-600" />
         </Link>
-        <h2 className="text-lg font-bold text-gray-800">Expense claim</h2>
+        <h2 className="text-lg font-bold text-gray-800 flex-1">Expense claim</h2>
+        {isOwner && ['draft', 'submitted', 'rejected'].includes(expense.status) && (
+          <Link href={'/expenses/' + id + '/edit'} className="p-2 text-gray-400 hover:text-aas-blue transition-colors">
+            <Pencil size={16} />
+          </Link>
+        )}
       </div>
 
       <Card>
