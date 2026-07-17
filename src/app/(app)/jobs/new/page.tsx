@@ -14,7 +14,6 @@ export default function NewJobPage() {
   const [locationId, setLocationId] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
-  const [isManager, setIsManager] = useState(false);
   const [userId, setUserId] = useState('');
 
   const [customers, setCustomers] = useState<{ id: string; company_name: string }[]>([]);
@@ -36,9 +35,6 @@ export default function NewJobPage() {
     supabase.auth.getUser().then(({ data: { user } }) => {
       if (!user) { router.push('/login'); return; }
       setUserId(user.id);
-      supabase.from('profiles').select('role').eq('id', user.id).single().then(({ data }) => {
-        setIsManager(['administrator', 'manager'].includes(data?.role ?? ''));
-      });
     });
     loadDropdowns();
   }, []);
@@ -104,12 +100,11 @@ export default function NewJobPage() {
     setSaving(true);
     setError('');
     const supabase = createClient();
-    const status = isManager ? 'open' : 'pending_approval';
     const { error: err } = await supabase.from('job_board').insert({
       title: title.trim(),
       description: description.trim() || null,
       priority,
-      status,
+      status: 'open',
       customer_id: customerId || null,
       location_id: locationId || null,
       created_by: userId,
@@ -124,12 +119,6 @@ export default function NewJobPage() {
   return (
     <div className="p-4 max-w-lg mx-auto">
       <h2 className="text-lg font-bold text-gray-800 mb-4">Add job</h2>
-
-      {!isManager && (
-        <div className="mb-4 rounded-lg bg-amber-50 border border-amber-100 px-3 py-2 text-xs text-amber-700">
-          Your job will be submitted for manager approval before appearing on the board.
-        </div>
-      )}
 
       <form onSubmit={handleSubmit} className="space-y-4">
         {error && <div className="p-3 rounded-lg bg-red-50 text-sm text-red-700">{error}</div>}
@@ -151,8 +140,8 @@ export default function NewJobPage() {
             value={description}
             onChange={e => setDescription(e.target.value)}
             rows={3}
-            placeholder="Any details, instructions or context…"
-            className={`${inputClass} resize-none`}
+            placeholder="Any details, instructions or context..."
+            className={"" + inputClass + " resize-none"}
           />
         </div>
 
@@ -164,14 +153,14 @@ export default function NewJobPage() {
                 key={p}
                 type="button"
                 onClick={() => setPriority(p)}
-                className={`py-2 rounded-lg text-xs font-medium border capitalize transition-colors ${
+                className={"py-2 rounded-lg text-xs font-medium border capitalize transition-colors " + (
                   priority === p
                     ? p === 'urgent' ? 'bg-red-500 text-white border-red-500'
                     : p === 'high' ? 'bg-orange-500 text-white border-orange-500'
                     : p === 'medium' ? 'bg-yellow-400 text-white border-yellow-400'
                     : 'bg-gray-400 text-white border-gray-400'
                     : 'border-gray-200 text-gray-500 hover:border-gray-400'
-                }`}
+                )}
               >
                 {p}
               </button>
@@ -196,7 +185,7 @@ export default function NewJobPage() {
             onChange={e => { setCustomerId(e.target.value); setLocationId(''); }}
             className={inputClass}
           >
-            <option value="">— none —</option>
+            <option value="">-- none --</option>
             {customers.map(c => <option key={c.id} value={c.id}>{c.company_name}</option>)}
           </select>
 
@@ -224,7 +213,7 @@ export default function NewJobPage() {
                   disabled={savingCustomer || !newCustomerName.trim()}
                   className="flex-1 py-1.5 bg-aas-blue text-white rounded-lg text-xs font-medium disabled:opacity-60"
                 >
-                  {savingCustomer ? 'Saving…' : 'Add customer'}
+                  {savingCustomer ? 'Saving...' : 'Add customer'}
                 </button>
               </div>
             </div>
@@ -248,7 +237,7 @@ export default function NewJobPage() {
             onChange={e => setLocationId(e.target.value)}
             className={inputClass}
           >
-            <option value="">— none —</option>
+            <option value="">-- none --</option>
             {filteredLocations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
           </select>
 
@@ -284,7 +273,7 @@ export default function NewJobPage() {
                   disabled={savingLocation || !newLocationName.trim()}
                   className="flex-1 py-1.5 bg-aas-blue text-white rounded-lg text-xs font-medium disabled:opacity-60"
                 >
-                  {savingLocation ? 'Saving…' : 'Add location'}
+                  {savingLocation ? 'Saving...' : 'Add location'}
                 </button>
               </div>
             </div>
@@ -304,7 +293,7 @@ export default function NewJobPage() {
             disabled={saving}
             className="flex-1 py-2.5 bg-aas-blue text-white rounded-lg text-sm font-medium disabled:opacity-60"
           >
-            {saving ? 'Saving…' : isManager ? 'Post job' : 'Submit for approval'}
+            {saving ? 'Saving...' : 'Post job'}
           </button>
         </div>
       </form>
