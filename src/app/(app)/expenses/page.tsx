@@ -2,7 +2,7 @@ import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { format } from 'date-fns';
-import { Plus } from 'lucide-react';
+import { Plus, FileDown } from 'lucide-react';
 import { Card } from '@/components/ui/Card';
 import { ExpenseStatusBadge } from '@/components/ui/Badge';
 import { EXPENSE_CATEGORY_LABELS, cn } from '@/lib/utils';
@@ -86,10 +86,16 @@ export default async function ExpensesPage({
     <div className="p-4 space-y-4 max-w-3xl mx-auto">
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-bold text-gray-800">Expenses</h2>
-        <Link href="/expenses/new" className="flex items-center gap-1.5 px-3 py-2 bg-aas-blue text-white rounded-lg text-sm font-medium">
-          <Plus size={16} />
-          New claim
-        </Link>
+        <div className="flex items-center gap-2">
+          <Link href={'/expenses/export?month=' + format(new Date(), 'yyyy-MM')} className="flex items-center gap-1.5 px-3 py-2 border border-gray-200 text-gray-600 rounded-lg text-sm font-medium hover:bg-gray-50">
+            <FileDown size={16} />
+            Export PDF
+          </Link>
+          <Link href="/expenses/new" className="flex items-center gap-1.5 px-3 py-2 bg-aas-blue text-white rounded-lg text-sm font-medium">
+            <Plus size={16} />
+            New claim
+          </Link>
+        </div>
       </div>
 
       {isManagerOrAdmin && (pendingCount ?? 0) > 0 && (
