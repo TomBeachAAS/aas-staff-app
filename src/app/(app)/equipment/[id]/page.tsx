@@ -83,7 +83,21 @@ export default async function EquipmentDetailPage({ params }: { params: Promise<
         <p id="loc-status" style={{ display: hasLocation ? 'block' : 'none' }} className="text-xs text-gray-400 text-center">
           {locStatus}
         </p>
-        <div id="note-section" style={{ display: 'none' }} className="flex items-center gap-2 bg-white rounded-xl border border-gray-100 p-3">
+        {/* W3W location search */}
+<div className="flex items-center gap-2 bg-white rounded-xl border border-gray-100 px-3 py-2.5">
+  <span className="text-red-500 font-black text-sm shrink-0">///</span>
+  <input
+    id="w3w-input"
+    type="text"
+    placeholder="Paste W3W address to set location"
+    className="flex-1 text-sm focus:outline-none min-w-0 bg-transparent"
+  />
+  <button id="w3w-go-btn" className="px-3 py-1.5 bg-aas-blue text-white rounded-lg text-sm font-medium shrink-0">
+    Go
+  </button>
+</div>
+
+<div id="note-section" style={{ display: 'none' }} className="flex items-center gap-2 bg-white rounded-xl border border-gray-100 p-3">
           <input
             id="loc-note"
             type="text"
