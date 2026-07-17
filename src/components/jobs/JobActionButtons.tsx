@@ -17,6 +17,7 @@ export function JobActionButtons({ job, currentUserId, isManagerOrAdmin }: Props
   const [showCompleteForm, setShowCompleteForm] = useState(false);
   const [completionNotes, setCompletionNotes] = useState('');
   const [showRejectForm, setShowRejectForm] = useState(false);
+const [rejectionReason, setRejectionReason] = useState('');
 
   async function update(updates: Record<string, any>) {
     setLoading(true);
@@ -45,7 +46,7 @@ export function JobActionButtons({ job, currentUserId, isManagerOrAdmin }: Props
                 Cancel
               </button>
               <button
-                onClick={() => update({ status: 'rejected', approved_by: currentUserId })}
+                onClick={() => update({ status: 'rejected', approved_by: currentUserId, rejection_reason: rejectionReason.trim() || null })}
                 disabled={loading}
                 className="flex-1 py-2.5 bg-red-600 text-white rounded-lg text-sm font-medium disabled:opacity-60"
               >
