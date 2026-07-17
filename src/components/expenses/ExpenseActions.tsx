@@ -2,7 +2,8 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Trash2 } from 'lucide-react';
+import { Trash2, Pencil } from 'lucide-react';
+import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
 
 interface Props {
@@ -84,6 +85,17 @@ export function ExpenseActions({ expenseId, status, isOwner, isManagerOrAdmin, m
         >
           {loading === 'draft' ? 'Recalling…' : 'Recall claim'}
         </button>
+      )}
+
+      {/* Owner: edit claim (not paid) */}
+      {isOwner && status !== 'paid' && (
+        <Link
+          href={'/expenses/' + expenseId + '/edit'}
+          className="w-full flex items-center justify-center gap-2 py-2.5 border border-gray-300 text-gray-600 rounded-xl text-sm font-medium hover:bg-gray-50 transition-colors"
+        >
+          <Pencil size={14} />
+          Edit claim
+        </Link>
       )}
 
       {/* Manager: approve / reject */}
