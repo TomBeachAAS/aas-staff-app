@@ -6,13 +6,14 @@ import { Badge } from '@/components/ui/Badge';
 import { Card } from '@/components/ui/Card';
 import { cn, ROLE_LABELS } from '@/lib/utils';
 import { startImpersonation } from '@/app/actions/impersonation';
+import { toggleHidden } from '@/app/actions/staff';
 
 export const dynamic = 'force-dynamic';
 
 export default async function StaffPage({
   searchParams,
 }: {
-  searchParams: Promise<{ status?: string }>;
+  searchParams: Promise<{ status?: string; showHidden?: string }>;
 }) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -23,15 +24,15 @@ export default async function StaffPage({
 
   const sp = await searchParams;
   const statusFilter = sp.status ?? 'active';
+  const isAdmin = profile?.role === 'administrator';
+  const showHidden = isAdmin && sp.showHidden === '1';
 
-  const { data: staff } = await supabase
-    .from('profiles')
-    .select('*')
-    .eq('status', statusFilter)
-    .order('full_name');
+  let staffQuery = supabase.from('profiles').select('*').eq('status', statusFilter).order('full_name');
+  if (!showHidden) staffQuery = staffQuery.eq('hidden', false);
+  const { data: staff } = await staffQuery;
 
   let pendingStaff = null;
-  if (profile?.role === 'administrator') {
+  if (isAdmin) {
     const { data } = await supabase.from('profiles').select('*').eq('status', 'pending').order('created_at');
     pendingStaff = data;
   }
@@ -42,8 +43,6 @@ export default async function StaffPage({
     employee: 'green',
     contractor: 'amber',
   };
-
-  const isAdmin = profile?.role === 'administrator';
 
   return (
     <div className="p-4 space-y-4 max-w-3xl mx-auto">
@@ -97,13 +96,24 @@ export default async function StaffPage({
         ))}
       </div>
 
+      {isAdmin && (
+        <div className="flex justify-end">
+          <Link
+            href={`/staff?status=${statusFilter}${showHidden ? '' : '&showHidden=1'}`}
+            className="text-xs text-gray-400 hover:text-gray-600 underline underline-offset-2"
+          >
+            {showHidden ? 'Hide test accounts' : 'Show hidden accounts'}
+          </Link>
+        </div>
+      )}
+
       <Card>
         <div className="divide-y divide-gray-50">
           {(staff ?? []).length === 0 ? (
             <div className="text-center py-10 text-sm text-gray-400">No staff members found</div>
           ) : (
             (staff ?? []).map(s => (
-              <div key={s.id} className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors">
+              <div key={s.id} className={"flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors" + (s.hidden ? " opacity-60" : "")}>
                 <div className="w-9 h-9 rounded-full bg-aas-blue flex items-center justify-center shrink-0">
                   <span className="text-white text-xs font-bold">
                     {s.full_name.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase()}
@@ -116,14 +126,18 @@ export default async function StaffPage({
                 <div className="flex items-center gap-2 shrink-0">
                   <Badge variant={roleBadge[s.role] ?? 'default'}>{ROLE_LABELS[s.role]}</Badge>
                   {isAdmin && s.id !== user.id && (
-                    <form action={startImpersonation.bind(null, s.id)}>
-                      <button
-                        type="submit"
-                        className="text-xs px-2 py-1 border border-gray-200 rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-700 transition-colors whitespace-nowrap"
-                      >
-                        Log in as
-                      </button>
-                    </form>
+                    <>
+                      <form action={startImpersonation.bind(null, s.id)}>
+                        <button type="submit" className="text-xs px-2 py-1 border border-gray-200 rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-700 transition-colors whitespace-nowrap">
+                          Log in as
+                        </button>
+                      </form>
+                      <form action={toggleHidden.bind(null, s.id)}>
+                        <button type="submit" className="text-xs px-2 py-1 border border-gray-200 rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-700 transition-colors whitespace-nowrap">
+                          {s.hidden ? 'Unhide' : 'Hide'}
+                        </button>
+                      </form>
+                    </>
                   )}
                 </div>
               </div>
