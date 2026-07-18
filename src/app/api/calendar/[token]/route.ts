@@ -54,8 +54,8 @@ export async function GET(
   { params }: { params: Promise<{ token: string }> },
 ) {
   const { token: rawToken } = await params;
-const token = rawToken?.replace(/\.ics$/, '');
-if (!token) return new NextResponse('Not found', { status: 404 });
+  const token = rawToken?.replace(/\.ics$/, '');
+  if (!token) return new NextResponse('Not found', { status: 404 });
 
   const supabase = createAdminClient();
 
@@ -88,7 +88,7 @@ if (!token) return new NextResponse('Not found', { status: 404 });
       .not('task_date', 'is', null),
     supabase
       .from('holidays')
-      .select('id, start_date, end_date, holiday_type')
+      .select('id, start_date, end_date')
       .eq('user_id', userId)
       .eq('status', 'approved'),
     supabase
@@ -127,8 +127,7 @@ if (!token) return new NextResponse('Not found', { status: 404 });
   }
 
   for (const h of holidays ?? []) {
-    const label = (h.holiday_type as string) === 'unpaid' ? 'Unpaid Leave' : 'Holiday';
-    vevents.push(vevent({ uid: `holiday-${h.id}`, summary: `🌴 ${label}`, start: toICSDate(h.start_date), end: nextDay(h.end_date), allDay: true }));
+    vevents.push(vevent({ uid: `holiday-${h.id}`, summary: '🌴 Holiday', start: toICSDate(h.start_date), end: nextDay(h.end_date), allDay: true }));
   }
 
   for (const s of sickness ?? []) {
