@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Bell, BellOff, AlertCircle } from 'lucide-react';
 
 function urlBase64ToUint8Array(base64String: string): Uint8Array {
@@ -12,11 +12,11 @@ function urlBase64ToUint8Array(base64String: string): Uint8Array {
   return outputArray;
 }
 
-function swReadyWithTimeout(ms: number): Promise<ServiceWorkerRegistration> {
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
   return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error('sw-timeout')), ms);
-    navigator.serviceWorker.ready
-      .then(reg => { clearTimeout(timer); resolve(reg); })
+    const timer = setTimeout(() => reject(new Error(`${label}-timeout`)), ms);
+    promise
+      .then(val => { clearTimeout(timer); resolve(val); })
       .catch(err => { clearTimeout(timer); reject(err); });
   });
 }
@@ -28,6 +28,7 @@ export function NotificationPrompt() {
   const [error, setError] = useState('');
   const [supported, setSupported] = useState(false);
   const [iosAddToHome, setIosAddToHome] = useState(false);
+  const errorRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -50,33 +51,62 @@ export function NotificationPrompt() {
     setPermission(Notification.permission);
 
     // Check existing subscription (with timeout — SW can hang on iOS)
-    swReadyWithTimeout(8000)
+    withTimeout(navigator.serviceWorker.ready, 8000, 'sw')
       .then(reg => reg.pushManager.getSubscription())
       .then(sub => { if (sub) setSubscribed(true); })
       .catch(() => {/* ignore — not subscribed */});
   }, []);
 
+  // Scroll error into view when it appears
+  useEffect(() => {
+    if (error && errorRef.current) {
+      errorRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+  }, [error]);
+
   async function subscribe() {
     setLoading(true);
     setError('');
     try {
-      const perm = await Notification.requestPermission();
+      const perm = await withTimeout(
+        Promise.resolve(Notification.requestPermission()),
+        15000,
+        'permission'
+      );
       setPermission(perm);
       if (perm !== 'granted') { setLoading(false); return; }
 
       let reg: ServiceWorkerRegistration;
       try {
-        reg = await swReadyWithTimeout(12000);
+        reg = await withTimeout(navigator.serviceWorker.ready, 12000, 'sw');
       } catch {
-        setError('Service worker timed out. Try closing and reopening the app, then try again.');
+        setError('Service worker timed out. Close the app completely, reopen from your Home Screen, and try again.');
         setLoading(false);
         return;
       }
 
-      const sub = await reg.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!),
-      });
+      let sub: PushSubscription;
+      try {
+        sub = await withTimeout(
+          reg.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: urlBase64ToUint8Array(process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!),
+          }),
+          20000,
+          'subscribe'
+        );
+      } catch (err: any) {
+        const msg = err?.message ?? String(err);
+        if (msg.includes('subscribe-timeout')) {
+          setError('Subscription timed out. This sometimes happens on iPhone — close the app fully, reopen from your Home Screen, and try again.');
+        } else if (msg.includes('not allowed') || msg.includes('permission')) {
+          setError('Notification permission was denied. Go to Settings → Safari → Notifications and allow this site.');
+        } else {
+          setError('Could not subscribe: ' + msg + '. Try closing and reopening the app.');
+        }
+        setLoading(false);
+        return;
+      }
 
       const res = await fetch('/api/push/subscribe', {
         method: 'POST',
@@ -88,7 +118,9 @@ export function NotificationPrompt() {
       setSubscribed(true);
     } catch (err: any) {
       const msg = err?.message ?? String(err);
-      if (msg === 'sw-timeout') {
+      if (msg.includes('permission-timeout')) {
+        setError('The permission dialog did not respond. Please try again.');
+      } else if (msg.includes('sw-timeout')) {
         setError('Service worker timed out. Reopen the app from your Home Screen and try again.');
       } else {
         setError('Could not enable notifications: ' + msg);
@@ -102,7 +134,7 @@ export function NotificationPrompt() {
     setLoading(true);
     setError('');
     try {
-      const reg = await swReadyWithTimeout(8000);
+      const reg = await withTimeout(navigator.serviceWorker.ready, 8000, 'sw');
       const sub = await reg.pushManager.getSubscription();
       if (sub) {
         await fetch('/api/push/subscribe', {
@@ -143,7 +175,7 @@ export function NotificationPrompt() {
       </div>
 
       {error && (
-        <div className="flex items-start gap-2 p-3 bg-red-50 rounded-lg border border-red-100">
+        <div ref={errorRef} className="flex items-start gap-2 p-3 bg-red-50 rounded-lg border border-red-100">
           <AlertCircle size={14} className="text-red-500 mt-0.5 shrink-0" />
           <p className="text-xs text-red-700">{error}</p>
         </div>
@@ -178,6 +210,11 @@ export function NotificationPrompt() {
             <Bell size={14} />
             {loading ? 'Enabling...' : 'Enable notifications'}
           </button>
+          {loading && (
+            <p className="text-xs text-gray-400">
+              This can take up to 20 seconds on iPhone — please wait…
+            </p>
+          )}
         </>
       )}
     </div>

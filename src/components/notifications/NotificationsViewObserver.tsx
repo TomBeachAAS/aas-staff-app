@@ -3,7 +3,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { format } from 'date-fns';
 import Link from 'next/link';
-import { createClient } from '@/lib/supabase/client';
 
 type Notification = {
   id: string;
@@ -38,8 +37,12 @@ export function NotificationsViewObserver({ notifications: initial }: { notifica
 
         if (toMark.length > 0) {
           setReadIds(prev => new Set([...prev, ...toMark]));
-          const supabase = createClient();
-          supabase.from('notifications').update({ is_read: true }).in('id', toMark);
+          // Use API route — more reliable than direct client call on iOS PWA
+          fetch('/api/notifications/read', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ids: toMark }),
+          }).catch(() => {/* silent — UI already updated */});
         }
       },
       { threshold: 0.5 }
@@ -51,7 +54,7 @@ export function NotificationsViewObserver({ notifications: initial }: { notifica
     });
 
     return () => observer.disconnect();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (
