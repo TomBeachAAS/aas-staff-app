@@ -6,10 +6,16 @@ export async function POST(req: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
 
-  const { id } = await req.json();
+  const body = await req.json();
 
-  await supabase.from('notifications').update({ is_read: true, read_at: new Date().toISOString() })
-    .eq('id', id)
+  // Accept single id or array of ids
+  const ids: string[] = body.ids ?? (body.id ? [body.id] : []);
+  if (ids.length === 0) return NextResponse.json({ success: true });
+
+  await supabase
+    .from('notifications')
+    .update({ is_read: true, read_at: new Date().toISOString() })
+    .in('id', ids)
     .eq('user_id', user.id);
 
   return NextResponse.json({ success: true });
