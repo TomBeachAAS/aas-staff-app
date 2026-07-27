@@ -116,37 +116,52 @@ export function NewTaskForm({ userId, initialDate, staff, customers: initialCust
   async function saveNewLocation() {
     if (!newLocName.trim()) { setLocationError('Name is required.'); return; }
     setSavingLocation(true); setLocationError('');
-    const supabase = createClient();
-    const { data, error: err } = await supabase.from('locations').insert({
-      name: newLocName.trim(),
-      address_line1: newLocAddress || null,
-      town: newLocTown || null,
-      postcode: newLocPostcode || null,
-      customer_id: customerId || null,
-    }).select('id, name, customer_id').single();
-    if (err || !data) { setLocationError(err?.message ?? 'Failed to save'); setSavingLocation(false); return; }
-    setLocations(prev => [...prev, data].sort((a, b) => a.name.localeCompare(b.name)));
-    setLocationId(data.id);
-    setShowNewLocation(false);
-    setNewLocName(''); setNewLocAddress(''); setNewLocTown(''); setNewLocPostcode('');
+    try {
+      const res = await fetch('/api/locations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: newLocName.trim(),
+          address_line1: newLocAddress || null,
+          town: newLocTown || null,
+          postcode: newLocPostcode || null,
+          customer_id: customerId || null,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok) { setLocationError(json.error ?? 'Failed to save'); setSavingLocation(false); return; }
+      setLocations(prev => [...prev, json].sort((a, b) => a.name.localeCompare(b.name)));
+      setLocationId(json.id);
+      setShowNewLocation(false);
+      setNewLocName(''); setNewLocAddress(''); setNewLocTown(''); setNewLocPostcode('');
+    } catch (e: any) {
+      setLocationError(e?.message ?? 'Failed to save');
+    }
     setSavingLocation(false);
   }
 
   async function saveNewEquipment() {
     if (!newEquipName.trim()) { setEquipmentError('Name is required.'); return; }
     setSavingEquipment(true); setEquipmentError('');
-    const supabase = createClient();
-    const { data, error: err } = await supabase.from('equipment').insert({
-      name: newEquipName.trim(),
-      registration: newEquipReg || null,
-      type: newEquipType || null,
-      is_active: true,
-    }).select('id, name, registration').single();
-    if (err || !data) { setEquipmentError(err?.message ?? 'Failed to save'); setSavingEquipment(false); return; }
-    setEquipment(prev => [...prev, data].sort((a, b) => a.name.localeCompare(b.name)));
-    setEquipmentId(data.id);
-    setShowNewEquipment(false);
-    setNewEquipName(''); setNewEquipReg(''); setNewEquipType('');
+    try {
+      const res = await fetch('/api/equipment', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: newEquipName.trim(),
+          registration: newEquipReg || null,
+          type: newEquipType || null,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok) { setEquipmentError(json.error ?? 'Failed to save'); setSavingEquipment(false); return; }
+      setEquipment(prev => [...prev, json].sort((a, b) => a.name.localeCompare(b.name)));
+      setEquipmentId(json.id);
+      setShowNewEquipment(false);
+      setNewEquipName(''); setNewEquipReg(''); setNewEquipType('');
+    } catch (e: any) {
+      setEquipmentError(e?.message ?? 'Failed to save');
+    }
     setSavingEquipment(false);
   }
 
