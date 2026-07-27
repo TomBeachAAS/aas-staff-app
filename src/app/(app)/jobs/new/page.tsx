@@ -78,24 +78,27 @@ export default function NewJobPage() {
   async function handleAddLocation() {
     if (!newLocationName.trim()) return;
     setSavingLocation(true);
-    const supabase = createClient();
-    const { data, error: err } = await supabase
-      .from('locations')
-      .insert({
-        name: newLocationName.trim(),
-        postcode: newLocationPostcode.trim() || null,
-        customer_id: customerId || null,
-        is_active: true,
-      })
-      .select('id, name, customer_id')
-      .single();
+    try {
+      const res = await fetch('/api/locations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: newLocationName.trim(),
+          postcode: newLocationPostcode.trim() || null,
+          customer_id: customerId || null,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok) { setError(json.error ?? 'Failed to create location'); setSavingLocation(false); return; }
+      setLocations(prev => [...prev, json].sort((a, b) => a.name.localeCompare(b.name)));
+      setLocationId(json.id);
+      setNewLocationName('');
+      setNewLocationPostcode('');
+      setShowNewLocation(false);
+    } catch (e: any) {
+      setError(e?.message ?? 'Failed to create location');
+    }
     setSavingLocation(false);
-    if (err || !data) { setError(err?.message ?? 'Failed to create location'); return; }
-    setLocations(prev => [...prev, data].sort((a, b) => a.name.localeCompare(b.name)));
-    setLocationId(data.id);
-    setNewLocationName('');
-    setNewLocationPostcode('');
-    setShowNewLocation(false);
   }
 
   async function handleSubmit(e: React.FormEvent) {
