@@ -57,18 +57,22 @@ export default function NewJobPage() {
   async function handleAddCustomer() {
     if (!newCustomerName.trim()) return;
     setSavingCustomer(true);
-    const supabase = createClient();
-    const { data, error: err } = await supabase
-      .from('customers')
-      .insert({ company_name: newCustomerName.trim(), is_active: true })
-      .select('id, company_name')
-      .single();
+    try {
+      const res = await fetch('/api/customers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: newCustomerName.trim() }),
+      });
+      const json = await res.json();
+      if (!res.ok) { setError(json.error ?? 'Failed to create customer'); setSavingCustomer(false); return; }
+      setCustomers(prev => [...prev, { id: json.id, company_name: newCustomerName.trim() }].sort((a, b) => a.company_name.localeCompare(b.company_name)));
+      setCustomerId(json.id);
+      setNewCustomerName('');
+      setShowNewCustomer(false);
+    } catch (e: any) {
+      setError(e?.message ?? 'Failed to create customer');
+    }
     setSavingCustomer(false);
-    if (err || !data) { setError(err?.message ?? 'Failed to create customer'); return; }
-    setCustomers(prev => [...prev, data].sort((a, b) => a.company_name.localeCompare(b.company_name)));
-    setCustomerId(data.id);
-    setNewCustomerName('');
-    setShowNewCustomer(false);
   }
 
   async function handleAddLocation() {
