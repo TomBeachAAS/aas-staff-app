@@ -90,19 +90,26 @@ export function NewTaskForm({ userId, initialDate, staff, customers: initialCust
   async function saveNewCustomer() {
     if (!newCompanyName.trim()) { setCustomerError('Company name is required.'); return; }
     setSavingCustomer(true); setCustomerError('');
-    const supabase = createClient();
-    const { data, error: err } = await supabase.from('customers').insert({
-      company_name: newCompanyName.trim(),
-      contact_name: newContactName || null,
-      phone: newPhone || null,
-      email: newEmail || null,
-      created_by: userId,
-    }).select('id, company_name').single();
-    if (err || !data) { setCustomerError(err?.message ?? 'Failed to save'); setSavingCustomer(false); return; }
-    setCustomers(prev => [...prev, data].sort((a, b) => a.company_name.localeCompare(b.company_name)));
-    setCustomerId(data.id);
-    setShowNewCustomer(false);
-    setNewCompanyName(''); setNewContactName(''); setNewPhone(''); setNewEmail('');
+    try {
+      const res = await fetch('/api/customers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: newCompanyName.trim(),
+          contact_name: newContactName || null,
+          phone: newPhone || null,
+          email: newEmail || null,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok) { setCustomerError(json.error ?? 'Failed to save'); setSavingCustomer(false); return; }
+      setCustomers(prev => [...prev, { id: json.id, company_name: newCompanyName.trim() }].sort((a, b) => a.company_name.localeCompare(b.company_name)));
+      setCustomerId(json.id);
+      setShowNewCustomer(false);
+      setNewCompanyName(''); setNewContactName(''); setNewPhone(''); setNewEmail('');
+    } catch (e: any) {
+      setCustomerError(e?.message ?? 'Failed to save');
+    }
     setSavingCustomer(false);
   }
 
