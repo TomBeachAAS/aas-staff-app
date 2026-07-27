@@ -2,7 +2,6 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { createClient } from '@/lib/supabase/client';
 import { CheckCircle, AlertCircle } from 'lucide-react';
 
 export function TaskCompleteForm({ taskId, userId }: { taskId: string; userId: string }) {
@@ -17,15 +16,14 @@ export function TaskCompleteForm({ taskId, userId }: { taskId: string; userId: s
     setLoading(true);
     setError(null);
     try {
-      const supabase = createClient();
-      const { error: updateError } = await supabase.from('tasks').update({
-        status: 'completed',
-        completed_by: userId,
-        completed_at: new Date().toISOString(),
-        completion_notes: notes || null,
-      }).eq('id', taskId);
-      if (updateError) {
-        setError(updateError.message);
+      const res = await fetch(`/api/tasks/${taskId}/complete`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ completion_notes: notes || null }),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        setError(json.error || 'Something went wrong');
         setLoading(false);
         return;
       }
