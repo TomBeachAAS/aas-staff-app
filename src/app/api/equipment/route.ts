@@ -35,7 +35,6 @@ export async function POST(req: NextRequest) {
     serial_no: body.serial_no || null,
     notes: body.notes || null,
     is_active: true,
-    created_by: user.id,
   }).select('id, name, registration').single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
