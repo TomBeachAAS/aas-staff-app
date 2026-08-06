@@ -13,19 +13,33 @@ function urlBase64ToUint8Array(base64String: string): Uint8Array {
 }
 
 async function getOrRegisterSW(): Promise<ServiceWorkerRegistration> {
-  // Try to get existing registration first — avoids the .ready hang on iOS
-  const existing = await navigator.serviceWorker.getRegistration('/');
-  if (existing) return existing;
-  // Not registered yet — register explicitly
-  const reg = await navigator.serviceWorker.register('/sw.js', { scope: '/' });
-  // Wait up to 10s for it to activate
-  await new Promise<void>((resolve) => {
-    if (reg.active) { resolve(); return; }
-    const timeout = setTimeout(resolve, 10_000);
-    const check = setInterval(() => {
-      if (reg.active) { clearInterval(check); clearTimeout(timeout); resolve(); }
-    }, 200);
-  });
+  // getRegistration avoids the .ready hang on iOS
+  let reg = await navigator.serviceWorker.getRegistration('/');
+  if (!reg) {
+    reg = await navigator.serviceWorker.register('/sw.js', { scope: '/' });
+  }
+  // ALWAYS wait for active — the bug was returning early when existing reg had active=null
+  if (!reg.active) {
+    await new Promise<void>((resolve, reject) => {
+      const timeout = setTimeout(() => reject(new Error('SW activation timed out')), 30_000);
+      const done = () => { clearTimeout(timeout); resolve(); };
+
+      // Listen on whichever SW is in flight
+      const sw = reg.installing ?? reg.waiting;
+      if (sw) {
+        sw.addEventListener('statechange', function handler() {
+          if ((this as ServiceWorker).state === 'activated') {
+            sw.removeEventListener('statechange', handler);
+            done();
+          }
+        });
+      }
+      // Poll as belt-and-braces fallback
+      const poll = setInterval(() => {
+        if (reg.active) { clearInterval(poll); done(); }
+      }, 300);
+    });
+  }
   return reg;
 }
 
