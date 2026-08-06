@@ -9,6 +9,10 @@ export const metadata: Metadata = {
     capable: true,
     statusBarStyle: 'default',
     title: 'AAS Staff',
+    startupImage: '/icons/icon-512.png',
+  },
+  icons: {
+    apple: '/icons/icon-192.png',
   },
 };
 
