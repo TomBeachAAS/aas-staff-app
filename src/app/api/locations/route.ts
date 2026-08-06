@@ -21,7 +21,6 @@ export async function POST(req: NextRequest) {
     postcode: postcode || null,
     customer_id: customer_id || null,
     is_active: true,
-    created_by: user.id,
   }).select('id, name, customer_id').single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
