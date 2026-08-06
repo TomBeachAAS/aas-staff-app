@@ -2,7 +2,6 @@
 
 import { useState } from 'react';
 import { Copy, Check, RefreshCw, Calendar } from 'lucide-react';
-import { createClient } from '@/lib/supabase/client';
 import { useRouter } from 'next/navigation';
 
 interface Props {
@@ -25,9 +24,12 @@ export function CalendarFeedCard({ feedUrl, userId }: Props) {
   async function handleRegenerate() {
     if (!confirm('This will break any existing calendar subscriptions. Continue?')) return;
     setRegenerating(true);
-    const supabase = createClient();
     const newToken = crypto.randomUUID();
-    await supabase.from('profiles').update({ calendar_token: newToken }).eq('id', userId);
+    await fetch(`/api/staff/${userId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ calendar_token: newToken }),
+    });
     const base = currentUrl.substring(0, currentUrl.lastIndexOf('/') + 1);
     setCurrentUrl(base + newToken);
     setRegenerating(false);

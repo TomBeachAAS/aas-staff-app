@@ -2,7 +2,6 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { createClient } from '@/lib/supabase/client';
 
 interface Props {
   job: { id: string; status: string; claimed_by: string | null };
@@ -17,15 +16,22 @@ export function JobActionButtons({ job, currentUserId, isManagerOrAdmin }: Props
   const [showCompleteForm, setShowCompleteForm] = useState(false);
   const [completionNotes, setCompletionNotes] = useState('');
   const [showRejectForm, setShowRejectForm] = useState(false);
-const [rejectionReason, setRejectionReason] = useState('');
+  const [rejectionReason, setRejectionReason] = useState('');
 
-  async function update(updates: Record<string, any>) {
+  async function update(updates: Record<string, unknown>) {
     setLoading(true);
     setError('');
-    const supabase = createClient();
-    const { error: err } = await supabase.from('job_board').update(updates).eq('id', job.id);
+    const res = await fetch(`/api/jobs/${job.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updates),
+    });
     setLoading(false);
-    if (err) { setError(err.message); return; }
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      setError(data.error ?? 'Failed to update');
+      return;
+    }
     router.refresh();
   }
 
@@ -36,11 +42,11 @@ const [rejectionReason, setRejectionReason] = useState('');
     <div className="space-y-3 pb-6">
       {error && <div className="p-3 rounded-lg bg-red-50 text-sm text-red-700">{error}</div>}
 
-      {/* Manager: approve / reject pending job */}
       {isManagerOrAdmin && job.status === 'pending_approval' && (
         showRejectForm ? (
           <div className="space-y-2">
             <p className="text-sm font-medium text-gray-700">Reason for rejection (optional)</p>
+            <textarea value={rejectionReason} onChange={e => setRejectionReason(e.target.value)} rows={3} placeholder="Reason for rejection…" className={inputClass} />
             <div className="flex gap-2">
               <button onClick={() => setShowRejectForm(false)} className="flex-1 py-2.5 border border-gray-200 rounded-lg text-sm text-gray-600">
                 Cancel
@@ -73,7 +79,6 @@ const [rejectionReason, setRejectionReason] = useState('');
         )
       )}
 
-      {/* Claim */}
       {job.status === 'open' && (
         <button
           onClick={() => update({ status: 'in_progress', claimed_by: currentUserId, claimed_at: new Date().toISOString() })}
@@ -84,7 +89,6 @@ const [rejectionReason, setRejectionReason] = useState('');
         </button>
       )}
 
-      {/* Unclaim + Complete — for the claimer or a manager */}
       {job.status === 'in_progress' && (isMyClaim || isManagerOrAdmin) && (
         <>
           {showCompleteForm ? (

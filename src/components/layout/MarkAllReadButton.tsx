@@ -1,17 +1,11 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { createClient } from '@/lib/supabase/client';
 
 export function MarkAllReadButton({ userId }: { userId: string }) {
   const router = useRouter();
   async function markAll() {
-    const supabase = createClient();
-    await supabase
-      .from('notifications')
-      .update({ is_read: true, read_at: new Date().toISOString() })
-      .eq('user_id', userId)
-      .eq('is_read', false);
+    await fetch('/api/notifications/mark-all', { method: 'POST' });
     router.refresh();
   }
   return (

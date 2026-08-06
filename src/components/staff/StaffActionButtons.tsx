@@ -2,7 +2,6 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { createClient } from '@/lib/supabase/client';
 import type { UserStatus, UserRole } from '@/types/database';
 
 interface Props {
@@ -18,16 +17,22 @@ export function StaffActionButtons({ staffId, currentStatus, currentRole }: Prop
 
   async function updateStatus(status: UserStatus) {
     setLoading(true);
-    const supabase = createClient();
-    await supabase.from('profiles').update({ status }).eq('id', staffId);
+    await fetch(`/api/staff/${staffId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status }),
+    });
     router.refresh();
     setLoading(false);
   }
 
   async function updateRole() {
     setLoading(true);
-    const supabase = createClient();
-    await supabase.from('profiles').update({ role }).eq('id', staffId);
+    await fetch(`/api/staff/${staffId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ role }),
+    });
     router.refresh();
     setLoading(false);
   }

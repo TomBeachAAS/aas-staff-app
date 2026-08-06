@@ -4,7 +4,6 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Trash2, Pencil } from 'lucide-react';
 import Link from 'next/link';
-import { createClient } from '@/lib/supabase/client';
 
 interface Props {
   expenseId: string;
@@ -23,17 +22,18 @@ export function ExpenseActions({ expenseId, status, isOwner, isManagerOrAdmin, m
   async function updateStatus(newStatus: string) {
     setLoading(newStatus);
     setError('');
-    const supabase = createClient();
-
-    const update: Record<string, unknown> = { status: newStatus };
+    const body: Record<string, unknown> = { status: newStatus };
     if (newStatus === 'approved' || newStatus === 'rejected') {
-      update.manager_notes = notes || null;
-      update.reviewed_at = new Date().toISOString();
+      body.manager_notes = notes || null;
     }
-
-    const { error: err } = await supabase.from('expenses').update(update).eq('id', expenseId);
-    if (err) {
-      setError(err.message);
+    const res = await fetch(`/api/expenses/${expenseId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      setError(data.error ?? 'Failed to update');
       setLoading(null);
       return;
     }
@@ -45,10 +45,10 @@ export function ExpenseActions({ expenseId, status, isOwner, isManagerOrAdmin, m
     if (!confirm('Delete this expense claim? This cannot be undone.')) return;
     setLoading('delete');
     setError('');
-    const supabase = createClient();
-    const { error: err } = await supabase.from('expenses').delete().eq('id', expenseId);
-    if (err) {
-      setError(err.message);
+    const res = await fetch(`/api/expenses/${expenseId}`, { method: 'DELETE' });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      setError(data.error ?? 'Failed to delete');
       setLoading(null);
       return;
     }
@@ -56,16 +56,12 @@ export function ExpenseActions({ expenseId, status, isOwner, isManagerOrAdmin, m
   }
 
   const canDelete = isOwner || isManagerOrAdmin;
-  const showManagerNotesReadonly =
-    (status === 'approved' || status === 'rejected') && managerNotes;
+  const showManagerNotesReadonly = (status === 'approved' || status === 'rejected') && managerNotes;
 
   return (
     <div className="space-y-3">
-      {error && (
-        <div className="p-3 rounded-lg bg-red-50 text-sm text-red-700">{error}</div>
-      )}
+      {error && <div className="p-3 rounded-lg bg-red-50 text-sm text-red-700">{error}</div>}
 
-      {/* Employee: submit draft */}
       {isOwner && status === 'draft' && (
         <button
           onClick={() => updateStatus('submitted')}
@@ -76,7 +72,6 @@ export function ExpenseActions({ expenseId, status, isOwner, isManagerOrAdmin, m
         </button>
       )}
 
-      {/* Employee: recall submitted claim */}
       {isOwner && status === 'submitted' && (
         <button
           onClick={() => updateStatus('draft')}
@@ -87,7 +82,6 @@ export function ExpenseActions({ expenseId, status, isOwner, isManagerOrAdmin, m
         </button>
       )}
 
-      {/* Owner: edit claim (not paid) */}
       {isOwner && status !== 'paid' && (
         <Link
           href={'/expenses/' + expenseId + '/edit'}
@@ -98,7 +92,6 @@ export function ExpenseActions({ expenseId, status, isOwner, isManagerOrAdmin, m
         </Link>
       )}
 
-      {/* Manager: approve / reject */}
       {isManagerOrAdmin && status === 'submitted' && (
         <div className="space-y-3">
           <div>
@@ -132,7 +125,6 @@ export function ExpenseActions({ expenseId, status, isOwner, isManagerOrAdmin, m
         </div>
       )}
 
-      {/* Manager: mark approved expense as paid */}
       {isManagerOrAdmin && status === 'approved' && (
         <button
           onClick={() => updateStatus('paid')}
@@ -143,7 +135,6 @@ export function ExpenseActions({ expenseId, status, isOwner, isManagerOrAdmin, m
         </button>
       )}
 
-      {/* Show recorded manager notes */}
       {showManagerNotesReadonly && (
         <div className="bg-gray-50 rounded-xl px-4 py-3">
           <p className="text-xs text-gray-400 mb-0.5">Manager notes</p>
@@ -151,7 +142,6 @@ export function ExpenseActions({ expenseId, status, isOwner, isManagerOrAdmin, m
         </div>
       )}
 
-      {/* Delete — owner or manager/admin, any status */}
       {canDelete && (
         <button
           onClick={handleDelete}

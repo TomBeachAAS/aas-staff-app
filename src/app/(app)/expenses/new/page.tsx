@@ -61,12 +61,13 @@ export default function NewExpensePage() {
 
     const intent = submitIntentRef.current;
     setLoading(intent);
-    const supabase = createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
 
     let receipt_url: string | null = null;
     if (receipt) {
+      // Storage upload stays client-side (storage RLS is separate from DB RLS)
+      const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) { setError('Not logged in'); setLoading(null); return; }
       const ext = receipt.name.split('.').pop() ?? 'jpg';
       const path = user.id + '/' + Date.now() + '.' + ext;
       const { data: uploadData, error: uploadErr } = await supabase.storage
@@ -83,19 +84,27 @@ export default function NewExpensePage() {
       receipt_url = publicUrl;
     }
 
-    const { error: err } = await supabase.from('expenses').insert({
-      user_id: user.id,
-      claim_date: form.claim_date,
-      category: form.category as never,
-      description: form.description,
-      amount: parseFloat(form.amount),
-      currency: form.currency,
-      notes: form.notes || null,
-      receipt_url,
-      status: intent,
+    const res = await fetch('/api/expenses', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        claim_date: form.claim_date,
+        category: form.category,
+        description: form.description,
+        amount: parseFloat(form.amount),
+        currency: form.currency,
+        notes: form.notes || null,
+        receipt_url,
+        status: intent,
+      }),
     });
 
-    if (err) { setError(err.message); setLoading(null); return; }
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      setError(data.error ?? 'Failed to save expense');
+      setLoading(null);
+      return;
+    }
     router.push('/expenses');
   }
 

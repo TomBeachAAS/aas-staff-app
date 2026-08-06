@@ -93,16 +93,16 @@ export default function SicknessPage() {
   async function handleAdd(e: React.FormEvent) {
     e.preventDefault();
     setSaving(true);
-    const supabase = createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-    await supabase.from('sickness_records').insert({
-      user_id: addUserId || user.id,
-      entered_by: user.id,
-      start_date: addStart,
-      end_date: addEnd || null,
-      sickness_type: addType,
-      private_notes: addNotes || null,
+    await fetch('/api/sickness', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        user_id: addUserId || currentUserId,
+        start_date: addStart,
+        end_date: addEnd || null,
+        sickness_type: addType,
+        private_notes: addNotes || null,
+      }),
     });
     setShowForm(false);
     setAddNotes('');
@@ -124,13 +124,16 @@ export default function SicknessPage() {
 
   async function handleEdit(id: string) {
     setEditSaving(true);
-    const supabase = createClient();
-    await supabase.from('sickness_records').update({
-      start_date: editStart,
-      end_date: editEnd || null,
-      sickness_type: editType,
-      private_notes: editNotes || null,
-    }).eq('id', id);
+    await fetch(`/api/sickness/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        start_date: editStart,
+        end_date: editEnd || null,
+        sickness_type: editType,
+        private_notes: editNotes || null,
+      }),
+    });
     setEditingId(null);
     setEditSaving(false);
     loadData();
@@ -138,8 +141,7 @@ export default function SicknessPage() {
 
   async function handleDelete(id: string) {
     setDeletingId(id);
-    const supabase = createClient();
-    await supabase.from('sickness_records').delete().eq('id', id);
+    await fetch(`/api/sickness/${id}`, { method: 'DELETE' });
     setDeleteConfirmId(null);
     setDeletingId(null);
     loadData();

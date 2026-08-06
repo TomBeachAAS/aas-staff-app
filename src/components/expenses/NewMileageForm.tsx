@@ -51,10 +51,11 @@ export function NewMileageForm({ userId, ratePerMile }: { userId: string; ratePe
     }
     const intent = submitIntentRef.current;
     setLoading(intent);
-    const supabase = createClient();
 
     let receipt_url: string | null = null;
     if (receipt) {
+      // Storage upload stays client-side (storage RLS is separate from DB RLS)
+      const supabase = createClient();
       const ext = receipt.name.split('.').pop() ?? 'jpg';
       const path = userId + '/mileage-' + Date.now() + '.' + ext;
       const { data: uploadData, error: uploadErr } = await supabase.storage
@@ -64,14 +65,30 @@ export function NewMileageForm({ userId, ratePerMile }: { userId: string; ratePe
       receipt_url = publicUrl;
     }
 
-    const { error: err } = await supabase.from('mileage_claims').insert({
-      user_id: userId, claim_date: form.claim_date, from_location: form.from_location,
-      to_location: form.to_location, business_reason: form.business_reason,
-      distance_miles: parseFloat(form.distance_miles), vehicle_reg: form.vehicle_reg || null,
-      rate_per_mile: ratePerMile, calculated_amount: parseFloat(amount),
-      notes: form.notes || null, receipt_url, status: intent,
+    const res = await fetch('/api/mileage', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        claim_date: form.claim_date,
+        from_location: form.from_location,
+        to_location: form.to_location,
+        business_reason: form.business_reason,
+        distance_miles: parseFloat(form.distance_miles),
+        vehicle_reg: form.vehicle_reg || null,
+        rate_per_mile: ratePerMile,
+        calculated_amount: parseFloat(amount),
+        notes: form.notes || null,
+        receipt_url,
+        status: intent,
+      }),
     });
-    if (err) { setError(err.message); setLoading(null); return; }
+
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      setError(data.error ?? 'Failed to save');
+      setLoading(null);
+      return;
+    }
     router.push('/mileage');
   }
 

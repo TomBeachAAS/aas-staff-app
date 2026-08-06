@@ -2,7 +2,6 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { createClient } from '@/lib/supabase/client';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 
 interface Profile {
@@ -46,20 +45,28 @@ export function StaffEditForm({ profile }: { profile: Profile }) {
     e.preventDefault();
     setSaving(true);
     setError('');
-    const supabase = createClient();
-    const { error: err } = await supabase.from('profiles').update({
-      full_name: form.full_name.trim(),
-      phone: form.phone.trim() || null,
-      job_title: form.job_title.trim() || null,
-      department: form.department.trim() || null,
-      start_date: form.start_date || null,
-      end_date: form.end_date || null,
-      holiday_allowance: Number(form.holiday_allowance),
-      timesheet_access: form.timesheet_access,
-      expenses_access: form.expenses_access,
-      holiday_access: form.holiday_access,
-    }).eq('id', profile.id);
-    if (err) { setError(err.message); setSaving(false); return; }
+    const res = await fetch(`/api/staff/${profile.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        full_name: form.full_name.trim(),
+        phone: form.phone.trim() || null,
+        job_title: form.job_title.trim() || null,
+        department: form.department.trim() || null,
+        start_date: form.start_date || null,
+        end_date: form.end_date || null,
+        holiday_allowance: Number(form.holiday_allowance),
+        timesheet_access: form.timesheet_access,
+        expenses_access: form.expenses_access,
+        holiday_access: form.holiday_access,
+      }),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      setError(data.error ?? 'Failed to save');
+      setSaving(false);
+      return;
+    }
     router.push('/staff/' + profile.id);
     router.refresh();
   }

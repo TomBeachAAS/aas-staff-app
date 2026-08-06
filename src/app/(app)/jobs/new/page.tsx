@@ -106,18 +106,24 @@ export default function NewJobPage() {
     if (!title.trim()) { setError('Title is required'); return; }
     setSaving(true);
     setError('');
-    const supabase = createClient();
-    const { error: err } = await supabase.from('job_board').insert({
-      title: title.trim(),
-      description: description.trim() || null,
-      priority,
-      status: 'open',
-      customer_id: customerId || null,
-      location_id: locationId || null,
-      created_by: userId,
+    const res = await fetch('/api/jobs', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        title: title.trim(),
+        description: description.trim() || null,
+        priority,
+        status: 'open',
+        customer_id: customerId || null,
+        location_id: locationId || null,
+      }),
     });
     setSaving(false);
-    if (err) { setError(err.message); return; }
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      setError(data.error ?? 'Failed to create job');
+      return;
+    }
     router.push('/jobs');
   }
 

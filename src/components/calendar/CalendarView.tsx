@@ -221,12 +221,11 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
     if (eventType === 'holiday') { setModalOpen(false); router.push('/holidays/new?start=' + modalDate + '&end=' + (endDate || modalDate)); return; }
     if (eventType === 'sickness') { setModalOpen(false); router.push('/sickness'); return; }
     setSaving(true);
-    const supabase = createClient();
     const startDatetime = allDay ? (modalDate + 'T00:00:00') : (modalDate + 'T' + startTime + ':00');
     const endDatetime = allDay ? ((endDate || modalDate) + 'T23:59:59') : (modalDate + 'T' + endTime + ':00');
     const payload = {
       user_id: targetUserId,
-      event_type: eventType as any,
+      event_type: eventType,
       title: title || null,
       start_datetime: startDatetime,
       end_datetime: endDatetime,
@@ -237,14 +236,26 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
       visibility,
       visible_to: visibility === 'custom' ? visibleTo : null,
     };
-    let error;
+    let res: Response;
     if (editingEvent) {
-      ({ error } = await supabase.from('calendar_events').update(payload).eq('id', editingEvent.id));
+      res = await fetch(`/api/calendar-events/${editingEvent.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
     } else {
-      ({ error } = await supabase.from('calendar_events').insert({ ...payload, created_by: currentUserId }));
+      res = await fetch('/api/calendar-events', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
     }
     setSaving(false);
-    if (error) { setModalError(error.message); return; }
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      setModalError(data.error ?? 'Failed to save event');
+      return;
+    }
     setModalOpen(false);
     loadEvents();
   }
@@ -253,10 +264,13 @@ export function CalendarView({ currentUserId, profile, initialView, initialDate,
     if (!editingEvent) return;
     if (!confirm('Delete this event? This cannot be undone.')) return;
     setDeleting(true);
-    const supabase = createClient();
-    const { error } = await supabase.from('calendar_events').delete().eq('id', editingEvent.id);
+    const res = await fetch(`/api/calendar-events/${editingEvent.id}`, { method: 'DELETE' });
     setDeleting(false);
-    if (error) { setModalError(error.message); return; }
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      setModalError(data.error ?? 'Failed to delete event');
+      return;
+    }
     setModalOpen(false);
     loadEvents();
   }

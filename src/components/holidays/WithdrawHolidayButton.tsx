@@ -2,7 +2,6 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { createClient } from '@/lib/supabase/client';
 
 export function WithdrawHolidayButton({ holidayId }: { holidayId: string }) {
   const router = useRouter();
@@ -13,13 +12,10 @@ export function WithdrawHolidayButton({ holidayId }: { holidayId: string }) {
     if (!confirm('Withdraw this holiday request? It will be removed and you can re-apply if needed.')) return;
     setLoading(true);
     setError('');
-    const supabase = createClient();
-    const { error: err } = await supabase
-      .from('holidays')
-      .delete()
-      .eq('id', holidayId);
-    if (err) {
-      setError(err.message);
+    const res = await fetch(`/api/holidays/${holidayId}`, { method: 'DELETE' });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      setError(data.error ?? 'Failed to withdraw');
       setLoading(false);
       return;
     }

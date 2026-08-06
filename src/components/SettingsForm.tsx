@@ -2,7 +2,6 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { createClient } from '@/lib/supabase/client';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Save } from 'lucide-react';
 
@@ -55,13 +54,11 @@ export function SettingsForm({ settings, adminId }: Props) {
 
   async function handleSave() {
     setSaving(true);
-    const supabase = createClient();
-    for (const [key, value] of Object.entries(values)) {
-      await supabase.from('company_settings').upsert(
-        { key, value, updated_by: adminId, updated_at: new Date().toISOString() },
-        { onConflict: 'key' }
-      );
-    }
+    await fetch('/api/settings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ settings: values }),
+    });
     setSaving(false);
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);

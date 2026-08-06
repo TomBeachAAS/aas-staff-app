@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import { createClient } from '@/lib/supabase/client';
 import { Check, Pencil } from 'lucide-react';
 
 type DayKey = 'mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sat' | 'sun';
@@ -38,12 +37,19 @@ export function WorkingPatternEditor({ userId, pattern }: Props) {
 
   async function save() {
     setSaving(true);
-    const supabase = createClient();
-    const patternData = { user_id: userId, is_current: true, ...days, weekly_hours: weeklyHours };
+    const patternData = { user_id: userId, ...days, weekly_hours: weeklyHours };
     if (pattern?.id) {
-      await supabase.from('working_patterns').update(patternData).eq('id', pattern.id);
+      await fetch(`/api/working-patterns/${pattern.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(patternData),
+      });
     } else {
-      await supabase.from('working_patterns').insert(patternData);
+      await fetch('/api/working-patterns', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(patternData),
+      });
     }
     setSaving(false);
     setSaved(true);

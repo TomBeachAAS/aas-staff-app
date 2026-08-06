@@ -2,7 +2,6 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { createClient } from '@/lib/supabase/client';
 
 interface Props {
   claimId: string;
@@ -21,14 +20,21 @@ export function MileageActions({ claimId, status, isOwner, isManagerOrAdmin, man
   async function updateStatus(newStatus: string) {
     setLoading(newStatus);
     setError('');
-    const supabase = createClient();
-    const update: Record<string, unknown> = { status: newStatus };
+    const body: Record<string, unknown> = { status: newStatus };
     if (newStatus === 'approved' || newStatus === 'rejected') {
-      update.manager_notes = notes || null;
-      update.reviewed_at = new Date().toISOString();
+      body.manager_notes = notes || null;
     }
-    const { error: err } = await supabase.from('mileage_claims').update(update).eq('id', claimId);
-    if (err) { setError(err.message); setLoading(null); return; }
+    const res = await fetch(`/api/mileage/${claimId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      setError(data.error ?? 'Failed to update');
+      setLoading(null);
+      return;
+    }
     router.refresh();
     setLoading(null);
   }
@@ -37,9 +43,13 @@ export function MileageActions({ claimId, status, isOwner, isManagerOrAdmin, man
     if (!confirm('Delete this mileage claim? This cannot be undone.')) return;
     setLoading('delete');
     setError('');
-    const supabase = createClient();
-    const { error: err } = await supabase.from('mileage_claims').delete().eq('id', claimId);
-    if (err) { setError(err.message); setLoading(null); return; }
+    const res = await fetch(`/api/mileage/${claimId}`, { method: 'DELETE' });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      setError(data.error ?? 'Failed to delete');
+      setLoading(null);
+      return;
+    }
     router.push('/mileage');
   }
 

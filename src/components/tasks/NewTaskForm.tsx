@@ -170,39 +170,33 @@ export function NewTaskForm({ userId, initialDate, staff, customers: initialCust
     if (!title) { setError('Title is required.'); return; }
     setLoading(true); setError('');
 
-    const supabase = createClient();
-    const { data: task, error: taskErr } = await supabase.from('tasks').insert({
-      title,
-      description: description || null,
-      task_date: taskDate || null,
-      start_time: allDay ? null : (startTime || null),
-      end_time: allDay ? null : (endTime || null),
-      priority,
-      status: 'not_started',
-      customer_id: customerId || null,
-      location_id: locationId || null,
-      equipment_id: equipmentId || null,
-      notes: [jobType ? `Job type: ${jobType}` : '', notes].filter(Boolean).join('\n') || null,
-      auto_rollover: autoRollover,
-      created_by: userId,
-    }).select().single();
+    const res = await fetch('/api/tasks', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        title,
+        description: description || null,
+        task_date: taskDate || null,
+        start_time: allDay ? null : (startTime || null),
+        end_time: allDay ? null : (endTime || null),
+        priority,
+        status: 'not_started',
+        customer_id: customerId || null,
+        location_id: locationId || null,
+        equipment_id: equipmentId || null,
+        notes: [jobType ? `Job type: ${jobType}` : '', notes].filter(Boolean).join('\n') || null,
+        auto_rollover: autoRollover,
+        assignees,
+      }),
+    });
 
-    if (taskErr || !task) {
-      setError(taskErr?.message ?? 'Failed to create task');
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      setError(data.error ?? 'Failed to create task');
       setLoading(false);
       return;
     }
-
-    if (assignees.length > 0) {
-      const { error: assignErr } = await supabase.from('task_assignees').insert(
-        assignees.map(uid => ({ task_id: task.id, user_id: uid, assigned_by: userId }))
-      );
-      if (assignErr) {
-        setError('Task created but failed to assign: ' + assignErr.message);
-        setLoading(false);
-        return;
-      }
-    }
+    const task = await res.json();
 
     // Notify assignees (excluding the creator)
     fetch('/api/notify', {

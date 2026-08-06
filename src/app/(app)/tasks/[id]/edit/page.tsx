@@ -94,31 +94,32 @@ export default function EditTaskPage() {
     if (!title.trim()) { setError('Title is required'); return; }
     setSaving(true);
     setError('');
-    const supabase = createClient();
 
-    const { error: taskErr } = await supabase.from('tasks').update({
-      title: title.trim(),
-      description: description || null,
-      task_date: taskDate || null,
-      all_day: allDay,
-      start_time: !allDay ? startTime + ':00' : null,
-      end_time: !allDay ? endTime + ':00' : null,
-      priority,
-      status,
-      notes: notes || null,
-      customer_id: customerId || null,
-      location_id: locationId || null,
-      equipment_id: equipmentId || null,
-    }).eq('id', id);
+    const res = await fetch(`/api/tasks/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        title: title.trim(),
+        description: description || null,
+        task_date: taskDate || null,
+        all_day: allDay,
+        start_time: !allDay ? startTime + ':00' : null,
+        end_time: !allDay ? endTime + ':00' : null,
+        priority,
+        status,
+        notes: notes || null,
+        customer_id: customerId || null,
+        location_id: locationId || null,
+        equipment_id: equipmentId || null,
+        assignees: selectedAssignees,
+      }),
+    });
 
-    if (taskErr) { setError(taskErr.message); setSaving(false); return; }
-
-    // Update assignees: delete all then re-insert
-    await supabase.from('task_assignees').delete().eq('task_id', id);
-    if (selectedAssignees.length > 0) {
-      await supabase.from('task_assignees').insert(
-        selectedAssignees.map(userId => ({ task_id: id, user_id: userId }))
-      );
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      setError(data.error ?? 'Failed to save');
+      setSaving(false);
+      return;
     }
 
     setSaving(false);

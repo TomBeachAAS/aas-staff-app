@@ -2,7 +2,6 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { createClient } from '@/lib/supabase/client';
 
 export function ApproveHolidayForm({
   holidayId,
@@ -22,32 +21,31 @@ export function ApproveHolidayForm({
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
-    const supabase = createClient();
-    const { error: err } = await supabase
-      .from('holidays')
-      .update({
+    const res = await fetch(`/api/holidays/${holidayId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
         status: action === 'approve' ? 'approved' : 'rejected',
-        decided_by: approvedBy,
-        decided_at: new Date().toISOString(),
-        rejection_reason: action === 'reject' && reason ? reason : null,
-      })
-      .eq('id', holidayId);
-    if (err) { setError(err.message); setLoading(false); return; }
+        rejectionReason: action === 'reject' && reason ? reason : null,
+      }),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      setError(data.error ?? 'Failed to save');
+      setLoading(false);
+      return;
+    }
     fetch('/api/notify', {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({
-    type: 'holiday_decision',
-    data: { holidayId, status: action },
-  }),
-});
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type: 'holiday_decision', data: { holidayId, status: action } }),
+    });
     router.push('/holidays?filter=pending');
   }
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       {error && <div className="p-3 rounded-lg bg-red-50 text-sm text-red-700">{error}</div>}
-
       <div className="grid grid-cols-2 gap-2">
         {(['approve', 'reject'] as const).map(a => (
           <button
@@ -64,7 +62,6 @@ export function ApproveHolidayForm({
           </button>
         ))}
       </div>
-
       {action === 'reject' && (
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Reason (optional)</label>
@@ -77,7 +74,6 @@ export function ApproveHolidayForm({
           />
         </div>
       )}
-
       <div className="flex gap-3">
         <button type="button" onClick={() => router.back()} className="flex-1 py-2.5 border border-gray-200 rounded-lg text-sm text-gray-600">Cancel</button>
         <button

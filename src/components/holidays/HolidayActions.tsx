@@ -3,7 +3,6 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Trash2 } from 'lucide-react';
-import { createClient } from '@/lib/supabase/client';
 
 interface Props {
   holidayId: string;
@@ -20,9 +19,13 @@ export function HolidayActions({ holidayId, status, isOwner }: Props) {
     if (!confirm('Withdraw this holiday request? It will be permanently deleted.')) return;
     setLoading(true);
     setError('');
-    const supabase = createClient();
-    const { error: err } = await supabase.from('holidays').delete().eq('id', holidayId);
-    if (err) { setError(err.message); setLoading(false); return; }
+    const res = await fetch(`/api/holidays/${holidayId}`, { method: 'DELETE' });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      setError(data.error ?? 'Failed to withdraw');
+      setLoading(false);
+      return;
+    }
     router.push('/holidays');
   }
 

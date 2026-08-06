@@ -125,20 +125,24 @@ export default function EditJobPage() {
     if (!title.trim()) { setError('Title is required'); return; }
     setSaving(true);
     setError('');
-    const supabase = createClient();
-    const { error: err } = await supabase
-      .from('job_board')
-      .update({
+    const res = await fetch(`/api/jobs/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
         title: title.trim(),
         description: description.trim() || null,
         priority,
         customer_id: customerId || null,
         location_id: locationId || null,
         ...(isManager && { status }),
-      })
-      .eq('id', id);
+      }),
+    });
     setSaving(false);
-    if (err) { setError(err.message); return; }
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      setError(data.error ?? 'Failed to save');
+      return;
+    }
     router.push('/jobs/' + id);
   }
 

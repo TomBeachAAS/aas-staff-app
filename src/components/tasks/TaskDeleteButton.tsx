@@ -2,7 +2,6 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { createClient } from '@/lib/supabase/client';
 import { Trash2 } from 'lucide-react';
 
 export function TaskDeleteButton({ taskId }: { taskId: string }) {
@@ -12,9 +11,7 @@ export function TaskDeleteButton({ taskId }: { taskId: string }) {
 
   async function handleDelete() {
     setLoading(true);
-    const supabase = createClient();
-    await supabase.from('task_assignees').delete().eq('task_id', taskId);
-    await supabase.from('tasks').delete().eq('id', taskId);
+    await fetch(`/api/tasks/${taskId}`, { method: 'DELETE' });
     router.push('/tasks');
   }
 
