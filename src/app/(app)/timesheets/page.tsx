@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { redirect } from 'next/navigation';
 import { format, startOfWeek, endOfWeek, eachDayOfInterval, addWeeks } from 'date-fns';
 import { TimesheetWeek } from '@/components/timesheets/TimesheetWeek';
@@ -47,7 +48,8 @@ export default async function TimesheetsPage({
 
   let period = existing;
   if (!period) {
-    const { data: newPeriod } = await supabase
+    const adminForInsert = createAdminClient();
+    const { data: newPeriod } = await adminForInsert
       .from('timesheet_periods')
       .insert({
         user_id: viewUserId,
@@ -134,7 +136,8 @@ export default async function TimesheetsPage({
       });
 
     if (missingDays.length > 0) {
-      await supabase.from('timesheet_entries').insert(
+      const adminForEntries = createAdminClient();
+      await adminForEntries.from('timesheet_entries').insert(
         missingDays.map(dateStr => ({
           period_id: period!.id,
           user_id: viewUserId,

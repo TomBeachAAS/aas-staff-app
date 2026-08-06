@@ -3,7 +3,6 @@ import { useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { format, parseISO } from 'date-fns';
 import { ChevronLeft, ChevronRight, Check, Plus, AlertCircle, Send, ThumbsUp } from 'lucide-react';
-import { createClient } from '@/lib/supabase/client';
 import type { TimesheetEntry, WorkingPattern } from '@/types/database';
 
 interface Props {
@@ -135,31 +134,27 @@ export function TimesheetWeek({
     if (!entry?.start_time || !entry?.end_time) return;
     if (grossMins(entry.start_time, entry.end_time) <= 0) return;
     setSaving(dateStr);
-    const supabase = createClient();
+
     const existingId = entryIds.current[dateStr];
-    if (existingId) {
-      await supabase.from('timesheet_entries').update({
-        start_time: entry.start_time,
-        end_time: entry.end_time,
+    const res = await fetch('/api/timesheets/entries', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        periodId,
+        userId,
+        workDate: dateStr,
+        startTime: entry.start_time,
+        endTime: entry.end_time,
         notes: entry.notes || null,
-        is_auto_populated: false,
-      }).eq('id', existingId);
-    } else {
-      const { data: newEntry } = await supabase
-        .from('timesheet_entries')
-        .insert({
-          period_id: periodId,
-          user_id: userId,
-          work_date: dateStr,
-          start_time: entry.start_time,
-          end_time: entry.end_time,
-          notes: entry.notes || null,
-          is_auto_populated: false,
-        })
-        .select('id')
-        .single();
-      if (newEntry) entryIds.current[dateStr] = (newEntry as any).id;
+        entryId: existingId || null,
+      }),
+    });
+
+    if (res.ok) {
+      const json = await res.json();
+      if (!existingId && json.id) entryIds.current[dateStr] = json.id;
     }
+
     setAutoDays(prev => { const n = new Set(prev); n.delete(dateStr); return n; });
     setDirtyDays(prev => { const n = new Set(prev); n.delete(dateStr); return n; });
     setSavedDays(prev => new Set([...prev, dateStr]));
@@ -172,12 +167,11 @@ export function TimesheetWeek({
   async function confirmAll() {
     if (!periodId || !canEdit) return;
     setConfirmingAll(true);
-    const supabase = createClient();
-    await supabase
-      .from('timesheet_entries')
-      .update({ is_auto_populated: false })
-      .eq('period_id', periodId)
-      .eq('is_auto_populated', true);
+    await fetch('/api/timesheets/entries/confirm-all', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ periodId }),
+    });
     setAutoDays(new Set());
     setConfirmingAll(false);
   }
@@ -185,34 +179,24 @@ export function TimesheetWeek({
   async function lockPeriod(type: 'submit' | 'approve') {
     if (!periodId) return;
     setLocking(true);
-    const supabase = createClient();
 
-    // Auto-confirm any remaining auto-filled days
-    await supabase
-      .from('timesheet_entries')
-      .update({ is_auto_populated: false })
-      .eq('period_id', periodId)
-      .eq('is_auto_populated', true);
-    setAutoDays(new Set());
-
-    const newStatus = type === 'approve' ? 'approved' : 'submitted';
-    await supabase
-      .from('timesheet_periods')
-      .update({ is_locked: true, status: newStatus })
-      .eq('id', periodId);
-
-    await supabase.from('notifications').insert({
-      user_id: userId,
-      title: type === 'approve' ? 'Timesheet approved' : 'Timesheet submitted',
-      body: type === 'approve'
-        ? `Your timesheet for ${weekLabel} has been approved.`
-        : `Your timesheet for ${weekLabel} has been submitted.`,
-      link: `/timesheets?week=${weekStartStr}`,
-      read: false,
+    const res = await fetch(`/api/timesheets/periods/${periodId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: type,
+        weekLabel,
+        weekStartStr,
+        userId,
+      }),
     });
 
-    setLocked(true);
-    setCurrentStatus(newStatus);
+    if (res.ok) {
+      const json = await res.json();
+      setAutoDays(new Set());
+      setLocked(true);
+      setCurrentStatus(json.status);
+    }
     setLocking(false);
   }
 

@@ -2,7 +2,7 @@ import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { format } from 'date-fns';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Pencil } from 'lucide-react';
 import { HolidayStatusBadge } from '@/components/ui/Badge';
 import { Card, CardContent } from '@/components/ui/Card';
 import { HolidayActions } from '@/components/holidays/HolidayActions';
@@ -35,7 +35,6 @@ export default async function HolidayDetailPage({
 
   if (!isOwner && !isManagerOrAdmin) redirect('/holidays');
 
-  // Fetch owner and decider names in one query
   const userIds = [...new Set([holiday.user_id, holiday.decided_by].filter(Boolean))];
   const { data: profileRows } = userIds.length > 0
     ? await supabase.from('profiles').select('id, full_name').in('id', userIds)
@@ -47,11 +46,21 @@ export default async function HolidayDetailPage({
 
   return (
     <div className="p-4 space-y-4 max-w-md mx-auto">
-      <div className="flex items-center gap-3">
-        <Link href="/holidays" className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
-          <ArrowLeft size={18} className="text-gray-600" />
-        </Link>
-        <h2 className="text-lg font-bold text-gray-800">Holiday request</h2>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <Link href="/holidays" className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
+            <ArrowLeft size={18} className="text-gray-600" />
+          </Link>
+          <h2 className="text-lg font-bold text-gray-800">Holiday request</h2>
+        </div>
+        {isManagerOrAdmin && (
+          <Link
+            href={`/holidays/${id}/edit`}
+            className="flex items-center gap-1.5 text-sm text-aas-blue hover:underline px-2 py-1"
+          >
+            <Pencil size={14} /> Edit
+          </Link>
+        )}
       </div>
 
       <Card>
@@ -114,7 +123,6 @@ export default async function HolidayDetailPage({
         </CardContent>
       </Card>
 
-      {/* Manager: approve / reject buttons */}
       {isManagerOrAdmin && holiday.status === 'pending' && (
         <div className="flex gap-3">
           <Link
@@ -132,7 +140,6 @@ export default async function HolidayDetailPage({
         </div>
       )}
 
-      {/* Owner: withdraw pending request */}
       <HolidayActions holidayId={id} status={holiday.status} isOwner={isOwner} />
     </div>
   );
