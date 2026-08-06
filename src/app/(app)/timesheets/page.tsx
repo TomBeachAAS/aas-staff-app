@@ -37,7 +37,7 @@ export default async function TimesheetsPage({
   const weekEndStr = format(weekEnd, 'yyyy-MM-dd');
 
   // Resolve effective user: impersonation cookie takes effect when no explicit ?user= param
-  const { effectiveUserId } = await getEffectiveUser(supabase, user.id, profile.role);
+  const { effectiveUserId, isImpersonating } = await getEffectiveUser(supabase, user.id, profile.role);
 
   // Only managers/admins can view other users' timesheets via ?user= param
   // Impersonation cookie also overrides the default user
@@ -164,7 +164,7 @@ export default async function TimesheetsPage({
 
   let staffOverview: Array<{ userId: string; name: string; status: 'not_started' | 'draft' | 'submitted' | 'approved' }> = [];
 
-  if (isManagerOrAdmin) {
+  if (isManagerOrAdmin && !isImpersonating) {
     const { data: allProfiles } = await supabase
       .from('profiles')
       .select('id, full_name')
@@ -198,7 +198,7 @@ export default async function TimesheetsPage({
     <div className="p-4 space-y-4 max-w-3xl mx-auto">
       <h2 className="text-lg font-bold text-gray-800">Timesheets</h2>
 
-      {isManagerOrAdmin && staffOverview.length > 0 && (
+      {isManagerOrAdmin && !isImpersonating && staffOverview.length > 0 && (
         <TimesheetStaffOverview
           staff={staffOverview}
           weekStartStr={weekStartStr}
@@ -219,7 +219,7 @@ export default async function TimesheetsPage({
         isLocked={isLocked}
         periodStatus={(period as any)?.status ?? 'draft'}
         canEdit={canEdit}
-        isManagerView={viewUserId !== user.id && isManagerOrAdmin}
+        isManagerView={!isImpersonating && viewUserId !== user.id && isManagerOrAdmin}
         weekLabel={`${format(weekStart, 'd MMM')} – ${format(weekEnd, 'd MMM yyyy')}`}
       />
     </div>
