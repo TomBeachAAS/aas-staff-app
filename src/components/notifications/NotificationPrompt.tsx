@@ -13,33 +13,40 @@ function urlBase64ToUint8Array(base64String: string): Uint8Array {
 }
 
 async function getOrRegisterSW(): Promise<ServiceWorkerRegistration> {
-  // getRegistration avoids the .ready hang on iOS
+  // Get existing registration
   let reg = await navigator.serviceWorker.getRegistration('/');
+
+  // If registration exists but is stuck (no active, installing, or waiting) — clear it
+  if (reg && !reg.active && !reg.installing && !reg.waiting) {
+    await reg.unregister();
+    reg = undefined as any;
+  }
+
+  // Register fresh if needed
   if (!reg) {
     reg = await navigator.serviceWorker.register('/sw.js', { scope: '/' });
   }
-  // ALWAYS wait for active — the bug was returning early when existing reg had active=null
-  if (!reg.active) {
-    await new Promise<void>((resolve, reject) => {
-      const timeout = setTimeout(() => reject(new Error('SW activation timed out')), 30_000);
-      const done = () => { clearTimeout(timeout); resolve(); };
 
-      // Listen on whichever SW is in flight
-      const sw = reg.installing ?? reg.waiting;
-      if (sw) {
-        sw.addEventListener('statechange', function handler() {
-          if ((this as ServiceWorker).state === 'activated') {
-            sw.removeEventListener('statechange', handler);
-            done();
-          }
-        });
-      }
-      // Poll as belt-and-braces fallback
-      const poll = setInterval(() => {
+  // Already active — done
+  if (reg.active) return reg;
+
+  // Wait for the installing/waiting SW to reach activated state
+  await new Promise<void>((resolve, reject) => {
+    const timeout = setTimeout(() => reject(new Error('SW activation timed out — close the app fully, reopen from your Home Screen, then try again')), 30_000);
+    const done = () => { clearTimeout(timeout); resolve(); };
+
+    const poll = setInterval(() => {
+      if (reg.active) { clearInterval(poll); done(); }
+    }, 300);
+
+    const sw = reg.installing ?? reg.waiting;
+    if (sw) {
+      sw.addEventListener('statechange', function() {
         if (reg.active) { clearInterval(poll); done(); }
-      }, 300);
-    });
-  }
+      });
+    }
+  });
+
   return reg;
 }
 
