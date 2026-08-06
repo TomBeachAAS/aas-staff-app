@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { createClient } from '@/lib/supabase/client';
 import { getLeaveYear } from '@/lib/utils';
 
 function countWorkingDays(start: string, end: string): number {
@@ -35,16 +34,19 @@ export default function NewHolidayPage() {
   const [error, setError] = useState('');
   const [workingDays, setWorkingDays] = useState<number | null>(null);
   const [totalDays, setTotalDays] = useState<number | null>(null);
-  const [userRole, setUserRole] = useState<string>('employee');
+  const [effectiveRole, setEffectiveRole] = useState<string>('employee');
+  const [isImpersonating, setIsImpersonating] = useState(false);
+  const [effectiveName, setEffectiveName] = useState('');
 
   useEffect(() => {
-    const supabase = createClient();
-    supabase.auth.getUser().then(({ data: { user } }) => {
-      if (!user) return;
-      supabase.from('profiles').select('role').eq('id', user.id).single().then(({ data }) => {
-        setUserRole(data?.role ?? 'employee');
-      });
-    });
+    fetch('/api/effective-user')
+      .then(r => r.json())
+      .then(d => {
+        setEffectiveRole(d.effectiveRole ?? 'employee');
+        setIsImpersonating(d.isImpersonating ?? false);
+        setEffectiveName(d.effectiveName ?? '');
+      })
+      .catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -58,6 +60,7 @@ export default function NewHolidayPage() {
   }, [startDate, endDate]);
 
   const datesValid = !!(startDate && endDate && endDate >= startDate);
+  const isManagerOrAdmin = ['administrator', 'manager'].includes(effectiveRole);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -100,13 +103,16 @@ export default function NewHolidayPage() {
 
   return (
     <div className="p-4 max-w-md mx-auto">
-      <h2 className="text-lg font-bold text-gray-800 mb-5">Request holiday</h2>
+      <h2 className="text-lg font-bold text-gray-800 mb-1">Request holiday</h2>
+      {isImpersonating && effectiveName && (
+        <p className="text-sm text-aas-blue mb-4">For: <span className="font-semibold">{effectiveName}</span></p>
+      )}
 
       {error && (
         <div className="mb-4 p-3 rounded-lg bg-red-50 border border-red-100 text-sm text-red-700">{error}</div>
       )}
 
-      {['administrator', 'manager'].includes(userRole) && (
+      {isManagerOrAdmin && !isImpersonating && (
         <div className="mb-4 p-3 rounded-lg bg-green-50 border border-green-100 text-xs text-green-700">
           As a manager or administrator, your holiday will be automatically approved.
         </div>

@@ -7,6 +7,7 @@ import { HolidayStatusBadge } from '@/components/ui/Badge';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { StatCard } from '@/components/ui/StatCard';
 import { getLeaveYear } from '@/lib/utils';
+import { getEffectiveUser } from '@/lib/effective-user';
 import { HolidayYearSelector } from '@/components/holidays/HolidayYearSelector';
 
 export const dynamic = 'force-dynamic';
@@ -23,6 +24,8 @@ export default async function HolidaysPage({
   const { data: profile } = await supabase.from('profiles').select('*').eq('id', user.id).single();
   if (!profile || !profile.holiday_access) redirect('/dashboard');
 
+  const { effectiveUserId, isImpersonating } = await getEffectiveUser(supabase, user.id, profile.role);
+
   const sp = await searchParams;
   const filter = sp.filter ?? 'all';
   const leaveYear = parseInt(sp.year ?? String(getLeaveYear()));
@@ -34,7 +37,7 @@ export default async function HolidaysPage({
 
   // Balance for the user's own leave year
   const { data: balanceRows } = await supabase.rpc('get_holiday_balance', {
-    p_user_id: user.id,
+    p_user_id: effectiveUserId,
     p_leave_year: leaveYear,
   });
   const balance = balanceRows?.[0];
@@ -43,7 +46,7 @@ export default async function HolidaysPage({
   let myQuery = supabase
     .from('holidays')
     .select('*')
-    .eq('user_id', user.id)
+    .eq('user_id', effectiveUserId)
     .gte('start_date', leaveYearStart)
     .lte('start_date', leaveYearEnd)
     .order('start_date', { ascending: false })

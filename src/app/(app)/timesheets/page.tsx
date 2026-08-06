@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { getEffectiveUser } from '@/lib/effective-user';
 import { redirect } from 'next/navigation';
 import { format, startOfWeek, endOfWeek, eachDayOfInterval, addWeeks } from 'date-fns';
 import { TimesheetWeek } from '@/components/timesheets/TimesheetWeek';
@@ -35,8 +36,12 @@ export default async function TimesheetsPage({
   const weekStartStr = format(weekStart, 'yyyy-MM-dd');
   const weekEndStr = format(weekEnd, 'yyyy-MM-dd');
 
-  // Only managers/admins can view other users' timesheets
-  const viewUserId = (sp.user && isManagerOrAdmin) ? sp.user : user.id;
+  // Resolve effective user: impersonation cookie takes effect when no explicit ?user= param
+  const { effectiveUserId } = await getEffectiveUser(supabase, user.id, profile.role);
+
+  // Only managers/admins can view other users' timesheets via ?user= param
+  // Impersonation cookie also overrides the default user
+  const viewUserId = (sp.user && isManagerOrAdmin) ? sp.user : effectiveUserId;
 
   // Get or create timesheet period (retry after failed insert handles unique-constraint races)
   const { data: existing } = await supabase
