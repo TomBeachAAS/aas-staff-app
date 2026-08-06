@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
-  Wrench, LayoutDashboard, Calendar, Umbrella, Stethoscope, CheckSquare,
+  Wrench, LayoutDashboard, Calendar, Umbrella, Stethoscope, CheckSquare, AlertTriangle,
   ClipboardList, Users, Building2, MapPin, Clock, Receipt,
   Navigation, BarChart3, Settings, Bell, LogOut, ChevronLeft, ChevronRight, UserCircle, Briefcase
 } from 'lucide-react';
@@ -19,6 +19,7 @@ const navItems = [
   { href: '/sickness', icon: Stethoscope, label: 'Sickness' },
   { href: '/tasks', icon: CheckSquare, label: 'Tasks' },
   { href: '/jobs', icon: Briefcase, label: 'Jobs' },
+  { href: '/breakdowns', icon: AlertTriangle, label: 'Breakdowns' },
   { href: '/equipment', icon: Wrench, label: 'Equipment' },
 ];
 

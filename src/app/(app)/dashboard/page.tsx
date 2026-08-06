@@ -2,7 +2,7 @@ import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { format, subDays, startOfWeek } from 'date-fns';
-import { Umbrella, CheckSquare, AlertCircle, CalendarX, TrendingUp, Briefcase, ExternalLink } from 'lucide-react';
+import { Umbrella, CheckSquare, AlertCircle, CalendarX, TrendingUp, Briefcase, ExternalLink, AlertTriangle } from 'lucide-react';
 import { StatCard } from '@/components/ui/StatCard';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { MotivationalBanner } from '@/components/dashboard/MotivationalBanner';
@@ -104,8 +104,39 @@ t.created_by === user.id || assignedIds.includes(t.id)
   const overdueTasks = relevantTasks.filter((t: any) => t.task_date && t.task_date < today);
   const todayTasks = relevantTasks.filter((t: any) => t.task_date === today);
 
+  // Critical open breakdowns — shown to everyone
+  const { data: criticalBreakdowns } = await supabase
+    .from('breakdowns')
+    .select('id, title, machine_name, equipment:equipment(name), can_continue')
+    .eq('status', 'open')
+    .eq('urgency', 'critical')
+    .order('created_at', { ascending: false });
+
   return (
     <div className="p-4 space-y-4 max-w-4xl mx-auto">
+      {criticalBreakdowns && criticalBreakdowns.length > 0 && (
+        <div className="rounded-xl bg-red-600 p-4 space-y-2">
+          <div className="flex items-center gap-2">
+            <AlertTriangle size={18} className="text-white shrink-0" />
+            <p className="text-white font-bold text-sm">
+              {criticalBreakdowns.length} critical breakdown{criticalBreakdowns.length > 1 ? 's' : ''}
+            </p>
+          </div>
+          {criticalBreakdowns.slice(0, 3).map((br: any) => (
+            <a key={br.id} href={'/breakdowns/' + br.id} className="block bg-red-700/50 rounded-lg px-3 py-2 text-sm text-white hover:bg-red-700 transition-colors">
+              <span className="font-medium">{br.title}</span>
+              <span className="text-red-200"> — {(br.equipment as any)?.name ?? br.machine_name ?? 'Unknown machine'}</span>
+              {br.can_continue === 'no' && <span className="ml-2 text-xs bg-red-900/50 px-1.5 py-0.5 rounded">Grounded</span>}
+            </a>
+          ))}
+          {criticalBreakdowns.length > 3 && (
+            <a href="/breakdowns?status=open" className="block text-xs text-red-200 hover:text-white">
+              +{criticalBreakdowns.length - 3} more →
+            </a>
+          )}
+        </div>
+      )}
+
       <div>
         <h2 className="text-lg font-bold text-gray-800">
           Good {getGreeting()}, {profile.full_name.split(' ')[0]}

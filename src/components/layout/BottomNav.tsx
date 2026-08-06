@@ -2,19 +2,19 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, Calendar, CheckSquare, ClipboardList, MoreHorizontal } from 'lucide-react';
+import { LayoutDashboard, CheckSquare, ClipboardList, MoreHorizontal, AlertTriangle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const items = [
   { href: '/dashboard', icon: LayoutDashboard, label: 'Home' },
-  { href: '/calendar', icon: Calendar, label: 'Calendar' },
   { href: '/tasks', icon: CheckSquare, label: 'Tasks' },
   { href: '/jobs', icon: ClipboardList, label: 'Jobs' },
+  { href: '/breakdowns', icon: AlertTriangle, label: 'Breakdowns' },
   { href: '/more', icon: MoreHorizontal, label: 'More' },
 ];
 
 // Routes covered by the main nav tabs — anything else highlights "More"
-const PRIMARY_PREFIXES = ['/dashboard', '/calendar', '/tasks', '/jobs', '/more'];
+const PRIMARY_PREFIXES = ['/dashboard', '/tasks', '/jobs', '/breakdowns', '/more'];
 
 export function BottomNav() {
   const pathname = usePathname();
