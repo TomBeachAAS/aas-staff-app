@@ -1,3 +1,12 @@
+// Force immediate activation — belt-and-suspenders alongside next-pwa's skipWaiting/clientsClaim config
+self.addEventListener('install', function(event) {
+  self.skipWaiting();
+});
+
+self.addEventListener('activate', function(event) {
+  event.waitUntil(self.clients.claim());
+});
+
 self.addEventListener('push', function(event) {
   if (!event.data) return;
   var data = {};
