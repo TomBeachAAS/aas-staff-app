@@ -9,7 +9,7 @@ export async function POST() {
 
   const admin = createAdminClient();
   await admin.from('notifications')
-    .update({ is_read: true, read_at: new Date().toISOString() })
+    .update({ is_read: true })
     .eq('user_id', user.id)
     .eq('is_read', false);
 
