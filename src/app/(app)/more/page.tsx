@@ -3,7 +3,7 @@ import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import {
   Users, Building2, MapPin, Clock, Receipt,
-  Navigation, BarChart3, Settings, Bell, LogOut, Stethoscope, UserCircle, Wrench, Umbrella, Calendar, AlertTriangle
+  Navigation, BarChart3, Settings, Bell, LogOut, Stethoscope, UserCircle, Wrench, Umbrella, AlertTriangle
 } from 'lucide-react';
 import { logout } from '@/lib/auth-actions';
 
@@ -21,7 +21,6 @@ export default async function MorePage() {
     {
       title: 'General',
       items: [
-        { href: '/calendar', icon: Calendar, label: 'Calendar' },
         { href: '/holidays', icon: Umbrella, label: 'Holidays' },
         { href: '/breakdowns', icon: AlertTriangle, label: 'Breakdowns' },
         { href: '/sickness', icon: Stethoscope, label: 'Sickness' },
