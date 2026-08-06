@@ -1,12 +1,13 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { Plus, X } from 'lucide-react';
 
 export default function NewJobPage() {
   const router = useRouter();
+  const submittingRef = useRef(false);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [priority, setPriority] = useState('medium');
@@ -103,7 +104,9 @@ export default function NewJobPage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (submittingRef.current) return;
     if (!title.trim()) { setError('Title is required'); return; }
+    submittingRef.current = true;
     setSaving(true);
     setError('');
     const res = await fetch('/api/jobs', {
@@ -118,6 +121,7 @@ export default function NewJobPage() {
         location_id: locationId || null,
       }),
     });
+    submittingRef.current = false;
     setSaving(false);
     if (!res.ok) {
       const data = await res.json().catch(() => ({}));
