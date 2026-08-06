@@ -130,21 +130,17 @@ export function NotificationPrompt() {
         return;
       }
 
+      // No timeout here — Apple's servers can take 2-3 min on first attempt
       let sub: PushSubscription;
       try {
-        sub = await Promise.race([
-          reg.pushManager.subscribe({
-            userVisibleOnly: true,
-            applicationServerKey: urlBase64ToUint8Array(vapidKey),
-          }),
-          new Promise<never>((_, reject) => setTimeout(() => reject(new Error('timeout')), 90_000)),
-        ]);
+        sub = await reg.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(vapidKey),
+        });
       } catch (err: any) {
         const msg = err?.message ?? String(err);
-        if (msg === 'timeout') {
-          setError('Timed out waiting for push subscription. This can happen on iPhone — close the app fully, reopen from your Home Screen, and try again.');
-        } else if (msg.toLowerCase().includes('permission') || msg.toLowerCase().includes('not allowed')) {
-          setError('Push permission denied. Check Settings → Notifications for this app.');
+        if (msg.toLowerCase().includes('permission') || msg.toLowerCase().includes('not allowed')) {
+          setError('Push permission denied. Go to Settings → Notifications and allow this app.');
         } else {
           setError('Subscription failed: ' + msg);
         }
@@ -222,7 +218,7 @@ export function NotificationPrompt() {
     idle: '',
     permission: 'Requesting permission…',
     sw: 'Loading service worker…',
-    subscribing: 'Registering with Apple — this can take up to 60s on iPhone…',
+    subscribing: 'Waiting for Apple — keep the app open, this can take 1-2 minutes on iPhone…',
     saving: 'Saving…',
     done: '',
   };
