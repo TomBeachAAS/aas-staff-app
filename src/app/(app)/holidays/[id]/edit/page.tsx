@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Trash2 } from 'lucide-react';
 import Link from 'next/link';
 
 function countWorkingDays(start: string, end: string): number {
@@ -33,6 +33,7 @@ export default function EditHolidayPage() {
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState('');
   const [ownerName, setOwnerName] = useState('');
 
@@ -68,6 +69,19 @@ export default function EditHolidayPage() {
       setLoading(false);
     });
   }, [id]);
+
+  async function handleDelete() {
+    if (!confirm('Permanently delete this holiday request?')) return;
+    setDeleting(true);
+    const res = await fetch(`/api/holidays/${id}`, { method: 'DELETE' });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      setError(data.error ?? 'Failed to delete');
+      setDeleting(false);
+      return;
+    }
+    router.push('/holidays');
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -190,12 +204,22 @@ export default function EditHolidayPage() {
           </Link>
           <button
             type="submit"
-            disabled={saving}
+            disabled={saving || deleting}
             className="flex-1 py-2.5 bg-aas-blue text-white rounded-lg text-sm font-medium disabled:opacity-60"
           >
             {saving ? 'Saving…' : 'Save changes'}
           </button>
         </div>
+
+        <button
+          type="button"
+          onClick={handleDelete}
+          disabled={deleting || saving}
+          className="w-full flex items-center justify-center gap-2 py-2.5 border border-red-200 text-red-600 rounded-xl text-sm font-medium hover:bg-red-50 disabled:opacity-60 transition-colors"
+        >
+          <Trash2 size={14} />
+          {deleting ? 'Deleting…' : 'Delete holiday'}
+        </button>
       </form>
     </div>
   );
