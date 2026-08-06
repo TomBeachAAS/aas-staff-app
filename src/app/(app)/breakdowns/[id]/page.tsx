@@ -2,7 +2,7 @@ import { createClient } from '@/lib/supabase/server';
 import { redirect, notFound } from 'next/navigation';
 import { format } from 'date-fns';
 import Link from 'next/link';
-import { ArrowLeft, CheckCircle2, ArrowRightLeft } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, ArrowRightLeft, Pencil } from 'lucide-react';
 import { BreakdownActions } from '@/components/breakdowns/BreakdownActions';
 
 export const dynamic = 'force-dynamic';
@@ -47,10 +47,17 @@ export default async function BreakdownDetailPage({ params }: { params: { id: st
 
   return (
     <div className="p-4 max-w-2xl mx-auto space-y-4">
-      {/* Back */}
-      <Link href="/breakdowns" className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-aas-blue">
-        <ArrowLeft size={16} /> Breakdowns
-      </Link>
+      {/* Back + Edit */}
+      <div className="flex items-center justify-between">
+        <Link href="/breakdowns" className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-aas-blue">
+          <ArrowLeft size={16} /> Breakdowns
+        </Link>
+        {b.status === 'open' && (
+          <Link href={`/breakdowns/${params.id}/edit`} className="flex items-center gap-1.5 text-sm text-aas-blue hover:underline">
+            <Pencil size={14} /> Edit
+          </Link>
+        )}
+      </div>
 
       {/* Header */}
       <div className="bg-white rounded-xl border border-gray-100 p-4 space-y-3">
